@@ -1,6 +1,7 @@
 #include <genesis.h>
 #include "resources.h"
 #include "arena.h"
+#include "background.h"
 #include "player.h"
 #include "enemy.h"
 #include "snake.h"
@@ -92,6 +93,8 @@ int main(bool hardReset)
     PAL_setPalette(PAL1, playerShip.palette->data, DMA);
     playerSprite = SPR_addSprite(&playerShip, 0, 0, TILE_ATTR(PAL1, TRUE, FALSE, FALSE));
 
+    Background_load();
+
     Enemy_initAll();
     Snake_initAll();
     Bullet_initAll();
@@ -127,6 +130,8 @@ int main(bool hardReset)
         // original (the ship always shoots at whatever's nearest once loaded).
         if (closestThreat(player.x, player.y, &targetX, &targetY))
         {
+            Player_faceTarget(&player, targetX, targetY);
+
             if (--shootTimer <= 0)
             {
                 Bullet_fire(player.x + (PLAYER_W / 2), player.y + (PLAYER_H / 2), targetX, targetY);
@@ -148,6 +153,7 @@ int main(bool hardReset)
             newGame();
 
         SPR_setPosition(playerSprite, player.x, player.y);
+        SPR_setFrame(playerSprite, player.facing);
         drawScore();
         SPR_update();
 

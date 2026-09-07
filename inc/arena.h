@@ -7,9 +7,10 @@
 #define ARENA_W 320
 #define ARENA_H 224
 
-// Matches the real nave.png silhouette (traced from its alpha channel),
-// nose rotated to face up.
-#define PLAYER_W 24
+// Matches the real nave.png silhouette (traced from its alpha channel): an
+// 8-direction rotation set, one 32x32 frame per direction so every frame
+// shares the same square bounding box.
+#define PLAYER_W 32
 #define PLAYER_H 32
 
 #define ARENA_X_MIN 0
