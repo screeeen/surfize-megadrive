@@ -100,6 +100,49 @@ bool Enemy_collides(s16 px, s16 py, s16 pw, s16 ph)
     return FALSE;
 }
 
+bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY)
+{
+    u16 i;
+    bool found = FALSE;
+    s32 bestDist = 0;
+
+    for (i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (!enemies[i].alive) continue;
+
+        const s32 dx = enemies[i].x - x;
+        const s32 dy = enemies[i].y - y;
+        const s32 dist = (dx * dx) + (dy * dy);
+
+        if (!found || (dist < bestDist))
+        {
+            found = TRUE;
+            bestDist = dist;
+            *outX = enemies[i].x;
+            *outY = enemies[i].y;
+        }
+    }
+
+    return found;
+}
+
+bool Enemy_hit(s16 x, s16 y, s16 w, s16 h)
+{
+    u16 i;
+
+    for (i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (enemies[i].alive && overlap(x, y, w, h, enemies[i].x, enemies[i].y, ENEMY_W, ENEMY_H))
+        {
+            enemies[i].alive = FALSE;
+            SPR_setPosition(enemies[i].sprite, -ENEMY_W, -ENEMY_H);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 void Enemy_clearAll(void)
 {
     u16 i;

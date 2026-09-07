@@ -29,6 +29,16 @@ void Enemy_updateAll(s16 targetX, s16 targetY);
 // Matches the "arana" case of playerMovement.OnTriggerEnter -> finishGame().
 bool Enemy_collides(s16 px, s16 py, s16 pw, s16 ph);
 
+// Finds the enemy closest to (x, y) by squared distance, same target choice
+// as enemyController.getClosest() (used by both playerMovement's auto-aim
+// rotation and disparo's auto-fire). Returns FALSE if no enemy is alive.
+bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY);
+
+// AABB test of a single box against the enemy pool; deactivates and hides
+// the first overlapping enemy and returns TRUE. Spiders die in one hit here
+// (enemyLife's HP system isn't ported -- it's only used by "snake").
+bool Enemy_hit(s16 x, s16 y, s16 w, s16 h);
+
 // Deactivates every enemy and hides its sprite (enemyController.clearEnemies()).
 void Enemy_clearAll(void);
 
