@@ -6,5 +6,7 @@
 extern const SpriteDefinition playerShip;
 extern const SpriteDefinition spiderSprite;
 extern const SpriteDefinition bulletSprite;
+extern const SpriteDefinition snakeHead;
+extern const SpriteDefinition snakeSeg;
 
 #endif // _RES_RESOURCES_H_

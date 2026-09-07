@@ -2,6 +2,7 @@
 #include "resources.h"
 #include "arena.h"
 #include "enemy.h"
+#include "snake.h"
 
 #define BULLET_SPEED 4
 
@@ -87,6 +88,8 @@ u16 Bullet_checkHits(void)
 
     for (i = 0; i < MAX_BULLETS; i++)
     {
+        bool killed;
+
         if (!bullets[i].alive) continue;
 
         if (Enemy_hit(bullets[i].x, bullets[i].y, BULLET_W, BULLET_H))
@@ -94,6 +97,12 @@ u16 Bullet_checkHits(void)
             bullets[i].alive = FALSE;
             SPR_setPosition(bullets[i].sprite, -BULLET_W, -BULLET_H);
             kills++;
+        }
+        else if (Snake_hit(bullets[i].x, bullets[i].y, BULLET_W, BULLET_H, &killed))
+        {
+            bullets[i].alive = FALSE;
+            SPR_setPosition(bullets[i].sprite, -BULLET_W, -BULLET_H);
+            if (killed) kills++;
         }
     }
 
