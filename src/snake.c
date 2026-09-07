@@ -33,9 +33,9 @@ static void hideAll(SnakeSlot *s)
 {
     u16 i;
 
-    SPR_setPosition(s->headSprite, -SNAKE_W, -SNAKE_H);
+    SPR_setPosition(s->headSprite, -SNAKE_HEAD_W, -SNAKE_HEAD_H);
     for (i = 0; i < SNAKE_SEGMENTS; i++)
-        SPR_setPosition(s->segSprite[i], -SNAKE_W, -SNAKE_H);
+        SPR_setPosition(s->segSprite[i], -SNAKE_SEG_W, -SNAKE_SEG_H);
 }
 
 void Snake_initAll(void)
@@ -48,9 +48,9 @@ void Snake_initAll(void)
     for (i = 0; i < MAX_SNAKES; i++)
     {
         snakes[i].alive = FALSE;
-        snakes[i].headSprite = SPR_addSprite(&snakeHead, -SNAKE_W, -SNAKE_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
+        snakes[i].headSprite = SPR_addSprite(&snakeHead, -SNAKE_HEAD_W, -SNAKE_HEAD_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
         for (j = 0; j < SNAKE_SEGMENTS; j++)
-            snakes[i].segSprite[j] = SPR_addSprite(&snakeSeg, -SNAKE_W, -SNAKE_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
+            snakes[i].segSprite[j] = SPR_addSprite(&snakeSeg, -SNAKE_SEG_W, -SNAKE_SEG_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
     }
 }
 
@@ -65,10 +65,10 @@ void Snake_spawnAtEdge(void)
 
         switch (random() & 3)
         {
-            case 0: x = 0;                    y = random() % (ARENA_H - SNAKE_H); break;
-            case 1: x = ARENA_W - SNAKE_W;     y = random() % (ARENA_H - SNAKE_H); break;
-            case 2: x = random() % (ARENA_W - SNAKE_W); y = 0;                    break;
-            default: x = random() % (ARENA_W - SNAKE_W); y = ARENA_H - SNAKE_H;   break;
+            case 0: x = 0;                        y = random() % (ARENA_H - SNAKE_HEAD_H); break;
+            case 1: x = ARENA_W - SNAKE_HEAD_W;    y = random() % (ARENA_H - SNAKE_HEAD_H); break;
+            case 2: x = random() % (ARENA_W - SNAKE_HEAD_W); y = 0;                         break;
+            default: x = random() % (ARENA_W - SNAKE_HEAD_W); y = ARENA_H - SNAKE_HEAD_H;   break;
         }
 
         snakes[i].alive = TRUE;
@@ -162,7 +162,7 @@ bool Snake_hit(s16 x, s16 y, s16 w, s16 h, bool *killed)
     for (i = 0; i < MAX_SNAKES; i++)
     {
         if (!snakes[i].alive) continue;
-        if (!overlap(x, y, w, h, snakes[i].x, snakes[i].y, SNAKE_W, SNAKE_H)) continue;
+        if (!overlap(x, y, w, h, snakes[i].x, snakes[i].y, SNAKE_HEAD_W, SNAKE_HEAD_H)) continue;
 
         snakes[i].hp--;
         if (snakes[i].hp == 0)
@@ -186,7 +186,7 @@ bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph)
     {
         if (!snakes[i].alive) continue;
 
-        if (overlap(px, py, pw, ph, snakes[i].x, snakes[i].y, SNAKE_W, SNAKE_H))
+        if (overlap(px, py, pw, ph, snakes[i].x, snakes[i].y, SNAKE_HEAD_W, SNAKE_HEAD_H))
             return TRUE;
 
         for (j = 0; j < SNAKE_SEGMENTS; j++)
@@ -194,7 +194,7 @@ bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph)
             s16 sx, sy;
 
             segmentPos(&snakes[i], j, &sx, &sy);
-            if (overlap(px, py, pw, ph, sx, sy, SNAKE_W, SNAKE_H))
+            if (overlap(px, py, pw, ph, sx, sy, SNAKE_SEG_W, SNAKE_SEG_H))
                 return TRUE;
         }
     }

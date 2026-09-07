@@ -9,8 +9,9 @@
 // turning-speed Quaternion.Slerp smoothing aren't ported. "snake" (the
 // segmented enemy in headScr.c) isn't ported either -- this is "spider" only.
 #define MAX_ENEMIES 6
-#define ENEMY_W     16
-#define ENEMY_H     16
+// Matches the real culobicho.png silhouette (traced from its alpha channel).
+#define ENEMY_W     24
+#define ENEMY_H     24
 
 // Allocates the sprite pool. Call once at boot, after SPR_init().
 void Enemy_initAll(void);

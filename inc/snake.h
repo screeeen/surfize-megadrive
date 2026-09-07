@@ -22,8 +22,12 @@
 #define MAX_SNAKES      2
 #define SNAKE_SEGMENTS  3
 #define SNAKE_HEAD_HP   3
-#define SNAKE_W         16
-#define SNAKE_H         16
+// Head reuses culobicho.png (spider's art) scaled up to look tougher;
+// segments reuse culobicho2.png, a plain circle in the original art.
+#define SNAKE_HEAD_W    32
+#define SNAKE_HEAD_H    32
+#define SNAKE_SEG_W     16
+#define SNAKE_SEG_H     16
 
 void Snake_initAll(void);
 void Snake_spawnAtEdge(void);
