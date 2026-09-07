@@ -2,7 +2,7 @@
 #include "resources.h"
 #include "arena.h"
 
-#define SNAKE_SPEED 1
+#define SNAKE_SPEED 2
 
 // How many head positions separate one segment from the next in the
 // trail history -- stands in for headScr's segmentSpacing.

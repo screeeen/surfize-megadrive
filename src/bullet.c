@@ -4,7 +4,7 @@
 #include "enemy.h"
 #include "snake.h"
 
-#define BULLET_SPEED 4
+#define BULLET_SPEED 6
 
 typedef struct
 {

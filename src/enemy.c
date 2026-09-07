@@ -2,7 +2,7 @@
 #include "resources.h"
 #include "arena.h"
 
-#define ENEMY_SPEED 1
+#define ENEMY_SPEED 2
 
 typedef struct
 {

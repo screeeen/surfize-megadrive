@@ -10,12 +10,12 @@
 // Loosely mirrors gameControl's 0.4s wave tick, but much slower: every spawn
 // here is an immediate threat (no waves/levels/kill-scaling yet), so a fast
 // tick would overwhelm the player almost immediately.
-#define SPAWN_INTERVAL       90
-#define SNAKE_SPAWN_INTERVAL 240
+#define SPAWN_INTERVAL       60
+#define SNAKE_SPAWN_INTERVAL 180
 
 // Stand-in for disparo.shotTimeNormal (set per-instance in the Unity
 // Inspector, not in code, so the exact value isn't ported).
-#define SHOOT_INTERVAL 20
+#define SHOOT_INTERVAL 14
 
 static Player player;
 static Sprite *playerSprite;
@@ -155,6 +155,7 @@ int main(bool hardReset)
         SPR_setPosition(playerSprite, player.x, player.y);
         SPR_setFrame(playerSprite, player.facing);
         drawScore();
+        VDP_showFPS(FALSE, 33, 0);
         SPR_update();
 
         SYS_doVBlankProcess();

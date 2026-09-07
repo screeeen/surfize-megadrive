@@ -1,7 +1,7 @@
 #include "player.h"
 #include "arena.h"
 
-#define SPEED 2
+#define SPEED 3
 
 void Player_init(Player *p)
 {
