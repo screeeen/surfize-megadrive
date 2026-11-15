@@ -1,178 +1,620 @@
+#include "gm_art.h"
 #include "snake.h"
+#include "spr.h"
+#include "vramspr.h"
+#include "bench.h"
 #include "resources.h"
-#include "arena.h"
-
-#define SNAKE_SPEED 2
-
-// How many head positions separate one segment from the next in the
-// trail history -- stands in for headScr's segmentSpacing.
-#define TRAIL_GAP    5
-#define HISTORY_LEN  (SNAKE_SEGMENTS * TRAIL_GAP + 1)
+#include "entity.h"
+#include "fastmath.h"
+#include "collision.h"
+#include "hole.h"
+#include "effect.h"
+#include "audio.h"
+#include "game.h"
 
 typedef struct
 {
-    bool alive;
-    s16  x;
-    s16  y;
-    u8   hp;
-    s16  historyX[HISTORY_LEN];
-    s16  historyY[HISTORY_LEN];
-    u16  historyPos;
-    Sprite *headSprite;
-    Sprite *segSprite[SNAKE_SEGMENTS];
+    Entity e;
+    u8     type;
+    u8     followers;       // 12 (tipo 1) o 10 (tipo 2)
+    u8     stepDelay;       // stepdelay del GML, en frames de 50 Hz
+    // El historial se guarda ya en PIXELES enteros: la cabeza convierte una
+    // vez por frame y los 12 eslabones lo leen tal cual. Antes guardaba fix16
+    // y cada eslabón hacía dos desplazamientos de 6 bits, que en el 68000 son
+    // 18 ciclos cada uno: 36 por eslabón y frame, unos 1700 con la arena
+    // llena, para un valor que ya se podía haber convertido una sola vez.
+    s16    histX[SNAKE_MAX_HISTORY];
+    s16    histY[SNAKE_MAX_HISTORY];
+    u16    histPos;         // siguiente posición a escribir
+    // Posición de cada eslabón en píxeles enteros, calculada una sola vez por
+    // frame: el apuntado, las colisiones y el dibujado la leen de aquí en vez
+    // de recorrer el historial tres veces. En fix16 no se guarda: nadie la
+    // necesitaba con esa precisión y eran dos escrituras más por eslabón y
+    // frame, 96 en total.
+    s16    partIX[SNAKE_MAX_FOLLOWERS];
+    s16    partIY[SNAKE_MAX_FOLLOWERS];
+    s16    headIX, headIY;
+    // Caja que envuelve cabeza y eslabones, para descartar el gusano entero
+    // con cuatro comparaciones: los eslabones son un escudo contra las balas
+    // (ver Snake_hit) y comprobar 12 cajas por gusano y por proyectil son
+    // ~670 solapes por frame que casi siempre fallan.
+    // Medido: partir esta caja en dos mitades para afinar el descarte sale
+    // PEOR (41,8 fps frente a 43,0 en el caso peor). Mantener y comprobar dos
+    // cajas cuesta más de lo que ahorra saltarse seis eslabones, porque el
+    // barrido de 12 sólo corre cuando algo cae dentro de verdad.
+    s16    bbX0, bbY0, bbX1, bbY1;
+    u8     bbTick;
+    MDSpr *headSprite;
+    MDSpr *segSprite[SNAKE_MAX_FOLLOWERS];
+    // La cabeza gira a 32 direcciones con los frames en ROM, subidos por DMA
+    // al cambiar (ver VStream en inc/vramspr.h): su hueco de VRAM y su hoja.
+    VStream headStream;
+    const SpriteDefinition *headDef;
+    // oCu1 y oCu2 (los dos últimos eslabones) giran a 8 direcciones: van por
+    // VStream como la cabeza, cada uno con su hueco. Precargadas, sus dos
+    // hojas eran 64 tiles; así son 8 por gusano.
+    VStream cu1Stream, cu2Stream;
 } SnakeSlot;
 
+// Envolvente de las máscaras de cabeza y de eslabón, en desplazamientos desde
+// el punto de la parte: el margen con el que se crece la caja del gusano.
+#define MIN2(a, b)      (((a) < (b)) ? (a) : (b))
+#define MAX2(a, b)      (((a) > (b)) ? (a) : (b))
+#define SNAKE_BB_OX     MIN2(SNAKE_HEAD_BOX_OX, SNAKE_BODY_BOX_OX)
+#define SNAKE_BB_OY     MIN2(SNAKE_HEAD_BOX_OY, SNAKE_BODY_BOX_OY)
+#define SNAKE_BB_X1     MAX2(SNAKE_HEAD_BOX_OX + SNAKE_HEAD_BOX_W, SNAKE_BODY_BOX_OX + SNAKE_BODY_BOX_W)
+#define SNAKE_BB_Y1     MAX2(SNAKE_HEAD_BOX_OY + SNAKE_HEAD_BOX_H, SNAKE_BODY_BOX_OY + SNAKE_BODY_BOX_H)
+
+// La caja envolvente no hace falta exacta: sólo sirve para descartar deprisa.
+// Recalcularla cada frame son cuatro comparaciones por eslabón (unos 3800
+// ciclos con la arena llena), así que se recalcula cada 4 frames y se infla
+// con lo más que puede moverse el gusano en ese tiempo, redondeado hacia
+// arriba. Sigue sin dejarse fuera ningún contacto.
+//
+// Con la velocidad del GML eran 1,875 px/f x 4 -> 8. Con la de MonsterLite
+// por nivel (bloque 1) el máximo es el del nivel 9: f = 9.8 u/s -> 3,92 px/f
+// (251/64 en fix16), x 4 = 15,7 -> 16.
+#define SNAKE_BB_EVERY  4
+#define SNAKE_BB_MARGIN 16
+
 static SnakeSlot snakes[MAX_SNAKES];
+static fix16 lastKillX, lastKillY;
 
-static bool overlap(s16 ax, s16 ay, s16 aw, s16 ah, s16 bx, s16 by, s16 bw, s16 bh)
-{
-    return (ax < bx + bw) && (ax + aw > bx) && (ay < by + bh) && (ay + ah > by);
-}
+// Tiles de las siluetas de los eslabones, precargados en VRAM (ver
+// inc/vramspr.h): 8 rotaciones cada una menos el cuerpo, que en el original
+// no rota. Las cabezas no están aquí: van por VStream (32 direcciones).
+static u16 tail0Tile;               // oCabeza2: la cola, siempre el frame 0
+static u16 bodyTile;
 
-static void hideAll(SnakeSlot *s)
+static void hideSprites(SnakeSlot *s)
 {
     u16 i;
 
-    SPR_setPosition(s->headSprite, -SNAKE_HEAD_W, -SNAKE_HEAD_H);
-    for (i = 0; i < SNAKE_SEGMENTS; i++)
-        SPR_setPosition(s->segSprite[i], -SNAKE_SEG_W, -SNAKE_SEG_H);
+    sprHide(s->headSprite);
+    for (i = 0; i < SNAKE_MAX_FOLLOWERS; i++)
+        sprHide(s->segSprite[i]);
+}
+
+// Cada ranura del pool queda asignada a un tipo de gusano desde el arranque:
+// la definición de sprite de SGDK se fija al crearlo, y el reparto de
+// siluetas de la cadena depende de la longitud, que es distinta en cada tipo.
+// Con los topes del port (3 de tipo 1, 1 de tipo 2) sale exacto.
+static u8 slotType(u16 slot)
+{
+    return (slot < MAX_CABEZA_1) ? SNAKE_TYPE_1 : SNAKE_TYPE_2;
+}
+
+static u8 slotParts(u16 slot)
+{
+    return (slotType(slot) == SNAKE_TYPE_1) ? SNAKE1_PARTS : SNAKE2_PARTS;
 }
 
 void Snake_initAll(void)
 {
     u16 i, j;
 
-    // No PAL_setPalette here on purpose: snakeHead/snakeSeg are drawn in
-    // spider's exact two colors, so they render correctly on the PAL2 that
-    // Enemy_initAll() already loaded (see snake.h).
-    for (i = 0; i < MAX_SNAKES; i++)
-    {
-        snakes[i].alive = FALSE;
-        snakes[i].headSprite = SPR_addSprite(&snakeHead, -SNAKE_HEAD_W, -SNAKE_HEAD_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
-        for (j = 0; j < SNAKE_SEGMENTS; j++)
-            snakes[i].segSprite[j] = SPR_addSprite(&snakeSeg, -SNAKE_SEG_W, -SNAKE_SEG_H, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
-    }
-}
-
-void Snake_spawnAtEdge(void)
-{
-    u16 i, j;
-    s16 x, y;
+    tail0Tile = VSpr_loadFrame(&snakeTail, 0, 0);
+    bodyTile  = VSpr_loadFrame(&snakeBody, 0, 0);
 
     for (i = 0; i < MAX_SNAKES; i++)
     {
-        if (snakes[i].alive) continue;
+        SnakeSlot *s = &snakes[i];
+        const u8 parts = slotParts(i);
 
-        switch (random() & 3)
+        Entity_clear(&s->e);
+        s->type = slotType(i);
+        s->followers = parts - 1;
+        s->stepDelay = (s->type == SNAKE_TYPE_1) ? SNAKE1_STEPDELAY : SNAKE2_STEPDELAY;
+
         {
-            case 0: x = 0;                        y = random() % (ARENA_H - SNAKE_HEAD_H); break;
-            case 1: x = ARENA_W - SNAKE_HEAD_W;    y = random() % (ARENA_H - SNAKE_HEAD_H); break;
-            case 2: x = random() % (ARENA_W - SNAKE_HEAD_W); y = 0;                         break;
-            default: x = random() % (ARENA_W - SNAKE_HEAD_W); y = ARENA_H - SNAKE_HEAD_H;   break;
+            const bool t1 = (s->type == SNAKE_TYPE_1);
+
+            s->headDef = t1 ? &snakeHead1 : &snakeHead2;
+            s->headSprite = VStream_add(&s->headStream, s->headDef, PAL1);
         }
 
-        snakes[i].alive = TRUE;
-        snakes[i].x = x;
-        snakes[i].y = y;
-        snakes[i].hp = SNAKE_HEAD_HP;
-        snakes[i].historyPos = 0;
-        for (j = 0; j < HISTORY_LEN; j++)
+        for (j = 0; j < SNAKE_MAX_FOLLOWERS; j++)
         {
-            snakes[i].historyX[j] = x;
-            snakes[i].historyY[j] = y;
-        }
-        return;
-    }
-}
-
-static void stepToward(s16 *pos, s16 target)
-{
-    if (*pos < target) *pos += SNAKE_SPEED;
-    else if (*pos > target) *pos -= SNAKE_SPEED;
-}
-
-static void segmentPos(SnakeSlot *s, u16 segIndex, s16 *outX, s16 *outY)
-{
-    const u16 delay = (segIndex + 1) * TRAIL_GAP;
-    const u16 idx = (s->historyPos + HISTORY_LEN - delay) % HISTORY_LEN;
-
-    *outX = s->historyX[idx];
-    *outY = s->historyY[idx];
-}
-
-void Snake_updateAll(s16 targetX, s16 targetY)
-{
-    u16 i, j;
-
-    for (i = 0; i < MAX_SNAKES; i++)
-    {
-        if (!snakes[i].alive) continue;
-
-        stepToward(&snakes[i].x, targetX);
-        stepToward(&snakes[i].y, targetY);
-
-        snakes[i].historyPos = (snakes[i].historyPos + 1) % HISTORY_LEN;
-        snakes[i].historyX[snakes[i].historyPos] = snakes[i].x;
-        snakes[i].historyY[snakes[i].historyPos] = snakes[i].y;
-
-        SPR_setPosition(snakes[i].headSprite, snakes[i].x, snakes[i].y);
-
-        for (j = 0; j < SNAKE_SEGMENTS; j++)
-        {
-            s16 sx, sy;
-
-            segmentPos(&snakes[i], j, &sx, &sy);
-            SPR_setPosition(snakes[i].segSprite[j], sx, sy);
+            const u16 n = j + 1;            // índice de eslabón
+            if (n >= parts)                 s->segSprite[j] = VSpr_add(&snakeBody, PAL1, bodyTile);
+            else if (n == 1)                s->segSprite[j] = VSpr_add(&snakeTail, PAL1, tail0Tile);
+            else if (n == (u16)(parts - 2)) s->segSprite[j] = VStream_add(&s->cu1Stream, &snakeTail, PAL1);
+            else if (n == (u16)(parts - 1)) s->segSprite[j] = VStream_add(&s->cu2Stream, &snakeCu2, PAL1);
+            else                            s->segSprite[j] = VSpr_add(&snakeBody, PAL1, bodyTile);
         }
     }
 }
 
-bool Snake_closest(s16 x, s16 y, s16 *outX, s16 *outY)
+// Posición del eslabón n (1 = el que sigue a la cabeza), leída del historial.
+// Cache de todos los eslabones de un gusano, una vez por frame.
+//
+// El eslabón n va n*stepdelay posiciones por detrás en el historial. En vez
+// de multiplicar por cada eslabón (12 muls.w por gusano y frame), el índice
+// se arrastra restando stepdelay en cada vuelta.
+static void cacheParts(SnakeSlot *s)
 {
-    u16 i;
+    const u16 delay = s->stepDelay;
+    const u16 count = s->followers;
+    const s16 *hx = s->histX;
+    const s16 *hy = s->histY;
+    u16 idx = s->histPos;
+    u16 n;
+
+    s->headIX = F2I(s->e.x);
+    s->headIY = F2I(s->e.y);
+
+    if (s->bbTick == 0)
+    {
+        s->bbX0 = s->headIX;
+        s->bbY0 = s->headIY;
+        s->bbX1 = s->headIX;
+        s->bbY1 = s->headIY;
+    }
+
+    for (n = 0; n < count; n++)
+    {
+        idx = (idx - delay) & SNAKE_HIST_MASK;
+
+        {
+            const s16 ix = hx[idx];
+            const s16 iy = hy[idx];
+
+            s->partIX[n] = ix;
+            s->partIY[n] = iy;
+
+            if (s->bbTick == 0)
+            {
+                if (ix < s->bbX0) s->bbX0 = ix;
+                if (ix > s->bbX1) s->bbX1 = ix;
+                if (iy < s->bbY0) s->bbY0 = iy;
+                if (iy > s->bbY1) s->bbY1 = iy;
+            }
+        }
+    }
+
+    if (s->bbTick) { s->bbTick--; return; }
+    s->bbTick = SNAKE_BB_EVERY - 1;
+
+    // La caja se guarda ya crecida con la envolvente de las dos máscaras de
+    // parte (cabeza y eslabón), para que el descarte no se coma ningún
+    // contacto de verdad.
+    s->bbX0 += SNAKE_BB_OX - SNAKE_BB_MARGIN;
+    s->bbY0 += SNAKE_BB_OY - SNAKE_BB_MARGIN;
+    s->bbX1 += SNAKE_BB_X1 + SNAKE_BB_MARGIN;
+    s->bbY1 += SNAKE_BB_Y1 + SNAKE_BB_MARGIN;
+}
+
+// TRUE si la caja (x, y, w, h) puede tocar algo de este gusano.
+static FORCE_INLINE bool nearSnake(const SnakeSlot *s, s16 x, s16 y, s16 w, s16 h)
+{
+    return !(((x + w) < s->bbX0) || (x > s->bbX1) ||
+             ((y + h) < s->bbY0) || (y > s->bbY1));
+}
+
+bool Snake_spawn(u8 type)
+{
+    u16 i, k;
+
+    for (i = 0; i < MAX_SNAKES; i++)
+    {
+        SnakeSlot *s = &snakes[i];
+        const u16 h = Hole_snakeSpawn();
+        fix16 velo, turn;
+
+        if (s->e.active || (s->type != type)) continue;
+
+        if (type == SNAKE_TYPE_1)
+        {
+            // oCabeza1/Create_0: velo = random_range(5, 7.8), hp = 4,
+            // bodylength = 14, stepdelay = 7.
+            //
+            // velo es UN solo sorteo que el original usa a la vez como
+            // px/frame y como grados de giro por frame, así que aquí se
+            // sortea un índice y se interpola con él en las dos escalas: dos
+            // sorteos independientes darían gusanos que giran a un ritmo que
+            // no corresponde a su velocidad.
+            //
+            // Bloque 1 de MonsterLite: la VELOCIDAD de avance pasa a ser la
+            // de setSpeed por nivel (maxSpeed 4 del prefab culobicho, la
+            // misma para los dos tipos); el giro sigue siendo el sorteo del
+            // GML hasta el bloque 8, que trae el Slerp.
+            const u16 k = random() % 45;
+
+            turn = SNAKE1_TURN_MIN  + (fix16)(((s32)(SNAKE1_TURN_MAX  - SNAKE1_TURN_MIN)  * k) / 44);
+            velo = Entity_mlSpeed(g_level, ML_SNAKE_MAX_MU);
+            Entity_spawnHidden(&s->e, Hole_x(h), Hole_y(h), velo, turn, SNAKE1_HP);
+        }
+        else
+        {
+            // oCabeza2b/Create_0: velo = 6.2, hp = 2, bodylength = 12,
+            // stepdelay = 6. Velocidad de MonsterLite, como el tipo 1.
+            velo = Entity_mlSpeed(g_level, ML_SNAKE_MAX_MU);
+            Entity_spawnHidden(&s->e, Hole_x(h), Hole_y(h), velo, SNAKE2_TURN, SNAKE2_HP);
+        }
+
+        // Las colas del original empiezan vacías, así que los eslabones se
+        // quedan en el punto de creación hasta que se llenan.
+        {
+            const s16 hx0 = F2I(s->e.x);
+            const s16 hy0 = F2I(s->e.y);
+
+            for (k = 0; k < SNAKE_MAX_HISTORY; k++)
+            {
+                s->histX[k] = hx0;
+                s->histY[k] = hy0;
+            }
+        }
+        s->histPos = 0;
+        s->bbTick = 0;
+        cacheParts(s);
+
+        hideSprites(s);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+void Snake_updateAll(bool hasPlayer, fix16 px, fix16 py)
+{
+    u16 i, n;
+    u16 h;
+    u8  active[HOLE_COUNT];
+
+    // oAgujerSuper/Draw_0: "if place_meeting(x,y,oCabeza1) gus = 1 else gus = 0".
+    // El agujero por el que está saliendo un gusano se pinta con el reborde
+    // rojo. Se recalcula entero cada frame y Hole_setActive sólo repinta los
+    // que cambian.
+    for (h = 0; h < HOLE_COUNT; h++) active[h] = FALSE;
+
+    for (i = 0; i < MAX_SNAKES; i++)
+    {
+        SnakeSlot *s = &snakes[i];
+
+        if (!s->e.active) continue;
+
+        // Igual que la araña: la máquina de estados y el historial corren
+        // también durante alarm[0], con la cabeza quieta por speed = 0.
+        const bool shown = Entity_tickAppear(&s->e);
+
+        PROF_START(PROF_S_AI);
+        Entity_updateAI(&s->e, hasPlayer, px, py,
+                        SNAKE_HEAD_BOX_OX, SNAKE_HEAD_BOX_OY, SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H);
+        Entity_advance(&s->e);
+        PROF_STOP(PROF_S_AI);
+
+        // Historial de la cabeza: una entrada por frame.
+        PROF_START(PROF_S_CACHE);
+        s->histX[s->histPos] = F2I(s->e.x);
+        s->histY[s->histPos] = F2I(s->e.y);
+        s->histPos = (s->histPos + 1) & SNAKE_HIST_MASK;
+        cacheParts(s);
+        PROF_STOP(PROF_S_CACHE);
+
+        // La cabeza marca el agujero que tiene debajo, se vea o no: durante
+        // los 75 frames de aparición es justo cuando el original lo pinta.
+        for (h = 0; h < HOLE_COUNT; h++)
+        {
+            if (((u16)(s->headIX - F2I(Hole_x(h)) + 8) < 16) &&
+                ((u16)(s->headIY - F2I(Hole_y(h)) + 8) < 16))
+            {
+                active[h] = TRUE;
+                break;
+            }
+        }
+
+        if (!shown)
+        {
+            hideSprites(s);
+            continue;
+        }
+
+        // oCabeza1/Step_1 y oCabeza2b: image_angle = direction
+        PROF_START(PROF_S_HEAD);
+        {
+            const u16 rot = Entity_frame32(&s->e);
+
+            // La cabeza de tipo 1 va recortada a 16x16 con su esquina por
+            // frame (ver trim en tools/gm2md.py); la de tipo 2 llega a 17 px
+            // en algunas rotaciones y se queda en 24x24, centrada.
+            if (s->headDef == &snakeHead1)
+                sprPos(s->headSprite, s->headIX + snakeHead1OffX[rot], s->headIY + snakeHead1OffY[rot]);
+            else
+                sprPos(s->headSprite, s->headIX + SNAKE_HEAD_SPR_OFF_X, s->headIY + SNAKE_HEAD_SPR_OFF_Y);
+
+            VStream_frame(&s->headStream, s->headSprite, s->headDef->animations[rot]->frames[0]);
+        }
+        PROF_STOP(PROF_S_HEAD);
+
+        PROF_START(PROF_S_PARTS);
+
+        // Qué eslabón es cuál lo decide la longitud, que no cambia: el 1 es
+        // oCabeza2, el penúltimo oCu1 y el último oCu2, y todo lo de en medio
+        // son oCorpo sin rotación. Antes el bucle comprobaba las tres
+        // condiciones en cada vuelta; ahora los tres casos especiales salen
+        // fuera y el cuerpo es un bucle recto de dos escrituras.
+        {
+            const u16 last = s->followers - 1;      // oCu2
+            const u16 prev = s->followers - 2;      // oCu1
+            const s16 *pix = s->partIX;
+            const s16 *piy = s->partIY;
+
+            // Eslabón 1: oCabeza2, con el lookdir que recibió al nacer.
+            // (arte de la cola, frame 0, recortado: ver trim en gm2md.py)
+            sprPos(s->segSprite[0], pix[0] + snakeTailOffX[0], piy[0] + snakeTailOffY[0]);
+
+            // El cuerpo: el tramo más largo del juego, con el sesgo de
+            // pantalla sacado fuera (ver sprPosBias en inc/spr.h).
+            {
+                const s16 bx = sprBiasX() + SNAKE_BODY_SPR_OFF;
+                const s16 by = sprBiasY() + SNAKE_BODY_SPR_OFF;
+
+                for (n = 1; n < prev; n++)
+                    sprPosBias(s->segSprite[n], pix[n] + bx, piy[n] + by);
+            }
+
+            // oCu1 mira a oCu2 y oCu2 mira a oCu1.
+            {
+                const u8 f1 = Entity_angleFrame8(Fast_angle(I2F(pix[prev]), I2F(piy[prev]),
+                                                            I2F(pix[last]), I2F(piy[last])));
+                const u8 f2 = Entity_angleFrame8(Fast_angle(I2F(pix[last]), I2F(piy[last]),
+                                                            I2F(pix[prev]), I2F(piy[prev])));
+
+                sprPos(s->segSprite[prev], pix[prev] + snakeTailOffX[f1], piy[prev] + snakeTailOffY[f1]);
+                VStream_frame(&s->cu1Stream, s->segSprite[prev], snakeTail.animations[f1]->frames[0]);
+
+                sprPos(s->segSprite[last], pix[last] + snakeCu2OffX[f2], piy[last] + snakeCu2OffY[f2]);
+                VStream_frame(&s->cu2Stream, s->segSprite[last], snakeCu2.animations[f2]->frames[0]);
+            }
+        }
+        PROF_STOP(PROF_S_PARTS);
+    }
+
+    for (h = 0; h < HOLE_COUNT; h++) Hole_setActive(h, active[h]);
+}
+
+bool Snake_closest(s16 x, s16 y, s16 *outX, s16 *outY, s32 *bestIO)
+{
+    u16 i, n;
     bool found = FALSE;
-    s32 bestDist = 0;
+    s32 best = *bestIO;
 
     for (i = 0; i < MAX_SNAKES; i++)
     {
-        if (!snakes[i].alive) continue;
+        const SnakeSlot *s = &snakes[i];
 
-        const s32 dx = snakes[i].x - x;
-        const s32 dy = snakes[i].y - y;
-        const s32 dist = (dx * dx) + (dy * dy);
+        // Sin mirar 'visible' a propósito: el gusano que espera en su agujero
+        // (alarm[0] = 90) ya es un oMalo, y el oPlayer/Step_0 del original
+        // apunta con instance_nearest(x, y, oMalo), que no mira la
+        // visibilidad. Por eso al empezar la partida la nave se gira hacia el
+        // agujero del primer gusano y le dispara; mirando 'visible' disparaba
+        // hacia arriba, a la nada, hasta que salía.
+        if (!s->e.active) continue;
 
-        if (!found || (dist < bestDist))
+        // Si el punto más cercano de la caja del gusano ya está más lejos que
+        // el mejor que llevamos, sus 13 eslabones no pueden mejorarlo: 52
+        // distancias (con sus dos muls) se cambian por cuatro restas. El
+        // "mejor que llevamos" entra ya con el de las arañas, que se recorren
+        // antes y suelen estar cerca: así el descarte vale desde el primer
+        // gusano y no sólo a partir del segundo.
         {
-            found = TRUE;
-            bestDist = dist;
-            *outX = snakes[i].x;
-            *outY = snakes[i].y;
+            const s16 cdx = (x < s->bbX0) ? (s16)(s->bbX0 - x) : ((x > s->bbX1) ? (s16)(x - s->bbX1) : 0);
+            const s16 cdy = (y < s->bbY0) ? (s16)(s->bbY0 - y) : ((y > s->bbY1) ? (s16)(y - s->bbY1) : 0);
+
+            if (((s32)(cdx * cdx) + (s32)(cdy * cdy)) >= best) continue;
+        }
+
+        for (n = 0; n <= s->followers; n++)
+        {
+            const s16 ex = (n == 0) ? s->headIX : s->partIX[n - 1];
+            const s16 ey = (n == 0) ? s->headIY : s->partIY[n - 1];
+            const s16 dx = ex - x;
+            const s16 dy = ey - y;
+            // Multiplicación de 16x16 bits: la de 32 llama a __mulsi3.
+            const s32 d = (s32)(dx * dx) + (s32)(dy * dy);
+
+            if (d < best)
+            {
+                found = TRUE;
+                best = d;
+                *outX = ex;
+                *outY = ey;
+            }
         }
     }
 
+    *bestIO = best;
     return found;
 }
 
-bool Snake_hit(s16 x, s16 y, s16 w, s16 h, bool *killed)
+// morteGusano(): el gusano no desaparece, REVIENTA. El original recorre el
+// cuerpo entero y por cada eslabón crea un oExplosion desplazado al azar
+// (offsetExplosions() = choose(random(5), random(-5))), destruyendo la parte,
+// y al acabar suena aranamorteSnd una sola vez.
+//
+// Aquí el pool de explosiones es de MAX_EFFECTS, así que la cascada se ve
+// recortada a las últimas: se recorre igual y la ranura más vieja se recicla,
+// que deja la explosión repartida a lo largo del bicho.
+static void blowUp(SnakeSlot *s)
+{
+    u16 n;
+
+    Effect_spawnQuiet(s->e.x, s->e.y);
+
+    for (n = 0; n < s->followers; n++)
+    {
+        // offsetExplosions(): +-5 px del room -> +-1 px de pantalla.
+        const fix16 j = (fix16)((random() & 0x7F) - 64);
+
+        Effect_spawnQuiet(I2F(s->partIX[n]) + j, I2F(s->partIY[n]) - j);
+    }
+
+    // morteGusano(): audio_play_sound(aranamorteSnd, .7, false)
+    Audio_sfx(SFX_ARANAMORTE);
+}
+
+bool Snake_hit(s16 x, s16 y, s16 w, s16 h, bool *killed, bool *body)
 {
     u16 i;
 
     *killed = FALSE;
+    *body = FALSE;
 
     for (i = 0; i < MAX_SNAKES; i++)
     {
-        if (!snakes[i].alive) continue;
-        if (!overlap(x, y, w, h, snakes[i].x, snakes[i].y, SNAKE_HEAD_W, SNAKE_HEAD_H)) continue;
+        SnakeSlot *s = &snakes[i];
+        s16 hx, hy;
 
-        snakes[i].hp--;
-        if (snakes[i].hp == 0)
+        if (!s->e.active || !s->e.visible) continue;
+
+        hx = s->headIX + SNAKE_HEAD_BOX_OX;
+        hy = s->headIY + SNAKE_HEAD_BOX_OY;
+
+        if (!Coll_overlap(x, y, w, h, hx, hy, SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H)) continue;
+
+        // oCabeza1/Collision_oBulletS: "hp = hp - 1" + checkMorte(), que
+        // destruye el gusano entero cuando hp < 0.
+        s->e.hp -= DMG_TO_SNAKE;
+
+        if (s->e.hp < 0)
         {
-            snakes[i].alive = FALSE;
-            hideAll(&snakes[i]);
+            lastKillX = s->e.x;
+            lastKillY = s->e.y;
+            blowUp(s);
+            Entity_clear(&s->e);
+            hideSprites(s);
             *killed = TRUE;
         }
 
         return TRUE;
+    }
+
+    // Los eslabones son un escudo. En el original el impacto contra un eslabón
+    // dispara DOS manejadores: el del eslabón, heredado de oMalo
+    // ("if (global.explosions) instance_create(x, y, oExplosion)", que no
+    // destruye la bala), y a continuación el de la propia bala
+    // (oBulletThin/oWBlock/o3way/oLaser/Collision_oMalo: "with other if hp !=
+    // undefined hp -= 1" e "instance_destroy()"). Los eslabones tienen hp = 10
+    // (oCorpo/oCu1/oCu2/oCabeza2 Create_0) y NADIE comprueba nunca ese hp, así
+    // que no se pueden matar: se quedan la bala y siguen. Las cabezas no pasan
+    // por aquí porque oSpider/oCabeza1/oCabeza2b definen su propio
+    // Collision_oBulletS, que destruye la bala antes de que corra el de ella.
+    for (i = 0; i < MAX_SNAKES; i++)
+    {
+        const SnakeSlot *s = &snakes[i];
+        u16 n;
+
+        if (!s->e.active || !s->e.visible) continue;
+
+        if (!nearSnake(s, x, y, w, h)) continue;
+
+        for (n = 0; n < s->followers; n++)
+            if (Coll_overlap(x, y, w, h,
+                             s->partIX[n] + SNAKE_BODY_BOX_OX,
+                             s->partIY[n] + SNAKE_BODY_BOX_OY,
+                             SNAKE_BODY_BOX_W, SNAKE_BODY_BOX_H))
+            {
+                // Es lo que dispara la metralla del WBLOCK y del PIVOT: su
+                // Collision_oMalo sólo corre contra un eslabón.
+                *body = TRUE;
+                return TRUE;
+            }
+    }
+
+    return FALSE;
+}
+
+bool Snake_hitPoint(s16 x, s16 y, bool *killed, bool *body)
+{
+    u16 i, n;
+
+    *killed = FALSE;
+    *body = FALSE;
+
+    for (i = 0; i < MAX_SNAKES; i++)
+    {
+        SnakeSlot *s = &snakes[i];
+
+        if (!s->e.active || !s->e.visible) continue;
+
+        if (((u16)(x - (s->headIX + SNAKE_HEAD_BOX_OX)) < (u16)SNAKE_HEAD_BOX_W) &&
+            ((u16)(y - (s->headIY + SNAKE_HEAD_BOX_OY)) < (u16)SNAKE_HEAD_BOX_H))
+        {
+            s->e.hp -= DMG_TO_SNAKE;
+
+            if (s->e.hp < 0)
+            {
+                lastKillX = s->e.x;
+                lastKillY = s->e.y;
+                blowUp(s);
+                Entity_clear(&s->e);
+                hideSprites(s);
+                *killed = TRUE;
+            }
+
+            return TRUE;
+        }
+
+        if ((x < s->bbX0) || (x > s->bbX1) || (y < s->bbY0) || (y > s->bbY1)) continue;
+
+        for (n = 0; n < s->followers; n++)
+            if (((u16)(x - (s->partIX[n] + SNAKE_BODY_BOX_OX)) < (u16)SNAKE_BODY_BOX_W) &&
+                ((u16)(y - (s->partIY[n] + SNAKE_BODY_BOX_OY)) < (u16)SNAKE_BODY_BOX_H))
+            {
+                *body = TRUE;
+                return TRUE;
+            }
+    }
+
+    return FALSE;
+}
+
+bool Snake_damageNoKill(s16 x, s16 y, s16 w, s16 h, s16 dmg)
+{
+    u16 i, n;
+
+    for (i = 0; i < MAX_SNAKES; i++)
+    {
+        SnakeSlot *s = &snakes[i];
+
+        if (!s->e.active || !s->e.visible) continue;
+
+        if (Coll_overlap(x, y, w, h,
+                         s->headIX + SNAKE_HEAD_BOX_OX, s->headIY + SNAKE_HEAD_BOX_OY,
+                         SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H))
+        {
+            s->e.hp -= dmg;
+            return TRUE;
+        }
+
+        if (!nearSnake(s, x, y, w, h)) continue;
+
+        for (n = 0; n < s->followers; n++)
+            if (Coll_overlap(x, y, w, h,
+                             s->partIX[n] + SNAKE_BODY_BOX_OX,
+                             s->partIY[n] + SNAKE_BODY_BOX_OY,
+                             SNAKE_BODY_BOX_W, SNAKE_BODY_BOX_H))
+                return TRUE;
     }
 
     return FALSE;
@@ -180,26 +622,44 @@ bool Snake_hit(s16 x, s16 y, s16 w, s16 h, bool *killed)
 
 bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph)
 {
-    u16 i, j;
+    u16 i, n;
 
     for (i = 0; i < MAX_SNAKES; i++)
     {
-        if (!snakes[i].alive) continue;
+        const SnakeSlot *s = &snakes[i];
 
-        if (overlap(px, py, pw, ph, snakes[i].x, snakes[i].y, SNAKE_HEAD_W, SNAKE_HEAD_H))
+        if (!s->e.active || !s->e.visible) continue;
+
+        if (Coll_overlap(px, py, pw, ph,
+                         s->headIX + SNAKE_HEAD_BOX_OX,
+                         s->headIY + SNAKE_HEAD_BOX_OY,
+                         SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H))
             return TRUE;
 
-        for (j = 0; j < SNAKE_SEGMENTS; j++)
-        {
-            s16 sx, sy;
+        if (!nearSnake(s, px, py, pw, ph)) continue;
 
-            segmentPos(&snakes[i], j, &sx, &sy);
-            if (overlap(px, py, pw, ph, sx, sy, SNAKE_SEG_W, SNAKE_SEG_H))
+        for (n = 0; n < s->followers; n++)
+            if (Coll_overlap(px, py, pw, ph,
+                             s->partIX[n] + SNAKE_BODY_BOX_OX,
+                             s->partIY[n] + SNAKE_BODY_BOX_OY,
+                             SNAKE_BODY_BOX_W, SNAKE_BODY_BOX_H))
                 return TRUE;
-        }
     }
 
     return FALSE;
+}
+
+fix16 Snake_lastKillX(void) { return lastKillX; }
+fix16 Snake_lastKillY(void) { return lastKillY; }
+
+u16 Snake_countType(u8 type)
+{
+    u16 i, n = 0;
+
+    for (i = 0; i < MAX_SNAKES; i++)
+        if (snakes[i].e.active && (snakes[i].type == type)) n++;
+
+    return n;
 }
 
 void Snake_clearAll(void)
@@ -208,7 +668,7 @@ void Snake_clearAll(void)
 
     for (i = 0; i < MAX_SNAKES; i++)
     {
-        snakes[i].alive = FALSE;
-        hideAll(&snakes[i]);
+        Entity_clear(&snakes[i].e);
+        hideSprites(&snakes[i]);
     }
 }

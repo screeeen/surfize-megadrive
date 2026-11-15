@@ -1,164 +1,96 @@
+#include "gfxdebug.h"
 #include <genesis.h>
 #include "resources.h"
 #include "arena.h"
-#include "background.h"
-#include "player.h"
-#include "enemy.h"
-#include "snake.h"
-#include "bullet.h"
+#include "gm_art.h"
+#include "hole.h"
+#include "bg.h"
+#include "audio.h"
+#include "game.h"
+#include "fastmath.h"
+#include "bench.h"
 
-// Loosely mirrors gameControl's 0.4s wave tick, but much slower: every spawn
-// here is an immediate threat (no waves/levels/kill-scaling yet), so a fast
-// tick would overwhelm the player almost immediately.
-#define SPAWN_INTERVAL       60
-#define SNAKE_SPAWN_INTERVAL 180
+#ifndef PORT_DEBUG_BG
+#define PORT_DEBUG_BG 0
+#endif
+#include "spr.h"
 
-// Stand-in for disparo.shotTimeNormal (set per-instance in the Unity
-// Inspector, not in code, so the exact value isn't ported).
-#define SHOOT_INTERVAL 14
+// ===========================================================================
+// Arranque
+//
+// El original corre en una pantalla fija de 1600x1200 a 60 fps. El destino
+// es PAL 320x240 a 50 Hz, que conserva su 4:3 exacto (ver arena.h y
+// docs/PORT_AUDIT_GML.md).
+//
+// VDP_setScreenHeight240() sólo funciona en consola PAL. En NTSC el VDP se
+// queda en 224 líneas: la lógica mantiene el campo de 240 px (las distancias
+// y las posiciones de los agujeros siguen siendo las del original) pero la
+// franja inferior de 16 px no se ve, y el juego corre un 20% más rápido
+// porque las constantes están calculadas para 50 Hz.
+// ===========================================================================
 
-static Player player;
-static Sprite *playerSprite;
-static s16 spawnTimer;
-static s16 snakeSpawnTimer;
-static s16 shootTimer;
-static u16 kills;
-static u16 lastDrawnKills;
-
-// Same change-guarded redraw as ovni-megadrive/mega-drive-hello-world's
-// score line: VDP_drawText is too slow to call unconditionally every frame.
-static void drawScore(void)
+static void videoInit(void)
 {
-    char buf[16];
+    if (IS_PAL_SYSTEM) VDP_setScreenHeight240();
+    else               VDP_setScreenHeight224();
 
-    if (kills == lastDrawnKills) return;
-    lastDrawnKills = kills;
-
-    sprintf(buf, "SCORE %u", kills);
-    VDP_drawText(buf, 1, 1);
-}
-
-static s32 distSq(s16 ax, s16 ay, s16 bx, s16 by)
-{
-    const s32 dx = ax - bx;
-    const s32 dy = ay - by;
-
-    return (dx * dx) + (dy * dy);
-}
-
-// Combines Enemy_closest() (spiders) and Snake_closest() (snake heads) into
-// a single nearest-threat lookup, same target choice as
-// enemyController.getClosest() over its one shared enemies list.
-static bool closestThreat(s16 x, s16 y, s16 *outX, s16 *outY)
-{
-    s16 ex, ey, sx, sy;
-    const bool haveEnemy = Enemy_closest(x, y, &ex, &ey);
-    const bool haveSnake = Snake_closest(x, y, &sx, &sy);
-
-    if (haveEnemy && (!haveSnake || distSq(x, y, ex, ey) <= distSq(x, y, sx, sy)))
-    {
-        *outX = ex;
-        *outY = ey;
-        return TRUE;
-    }
-
-    if (haveSnake)
-    {
-        *outX = sx;
-        *outY = sy;
-        return TRUE;
-    }
-
-    return FALSE;
-}
-
-static void newGame(void)
-{
-    Enemy_clearAll();
-    Snake_clearAll();
-    Bullet_clearAll();
-    Player_init(&player);
-    SPR_setPosition(playerSprite, player.x, player.y);
-    spawnTimer = SPAWN_INTERVAL;
-    snakeSpawnTimer = SNAKE_SPAWN_INTERVAL;
-    shootTimer = SHOOT_INTERVAL;
-    kills = 0;
-    lastDrawnKills = 0xFFFF;
+    VDP_setScreenWidth320();
 }
 
 int main(bool hardReset)
 {
-    SPR_init();
+    videoInit();
 
-    PAL_setPalette(PAL1, playerShip.palette->data, DMA);
-    playerSprite = SPR_addSprite(&playerShip, 0, 0, TILE_ATTR(PAL1, TRUE, FALSE, FALSE));
-
-    Background_load();
-
-    Enemy_initAll();
-    Snake_initAll();
-    Bullet_initAll();
-
+    // El motor de sprites de SGDK no se usa: los tiles se precargan en VRAM
+    // (inc/vramspr.h) y la tabla de sprites del VDP la monta inc/spr.h, que no
+    // tiene el tope de 80 objetos ni los ~400 ciclos por sprite de SPR_update.
+    Spr_init();
+    // Tabla de senos por grado (ver inc/fastmath.h).
+    Fast_init();
+    Audio_init();
     JOY_init();
 
-    newGame();
+    // La semilla por defecto es fija: sin ella cada partida repetiría la
+    // misma secuencia de agujeros y velocidades de gusano.
+#if (PORT_STRESS || PORT_BENCH || PORT_PROF)
+    // Con el arnés de medición la semilla es fija: si no, cada arranque da
+    // una partida distinta y dos medidas no se pueden comparar.
+    setRandomSeed(0x1234);
+#else
+    setRandomSeed(GET_VCOUNTER ^ 0x1234);
+#endif
+
+    // Capa Compatibility_Colour del room _1: el fondo es un color plano.
+    // La textura background38 que lleva encima es gris al 6% de opacidad
+    // sobre ese color, diferencia que no llega a la resolución de color del
+    // VDP (3 bits por componente), así que no se porta: ver el informe.
+    // Con PORT_DEBUG_BG el fondo arranca en el normal y se va cambiando con
+    // el botón C durante la partida (ver Game_update). No entra en la ROM que
+    // se distribuye.
+    PAL_setColor(0, ROOM_BG_COLOR);
+
+    // Todos los sprites comparten la paleta sacada del arte original.
+    PAL_setPalette(PAL1, spritePalette, DMA);
+
+    Hole_initGraphics();
+    Bg_init();
+    Game_init();
 
     while (TRUE)
     {
-        const u16 state = JOY_readJoypad(JOY_1);
-        s16 targetX, targetY;
+        Game_update();
 
-        Player_update(&player, state);
-        Enemy_updateAll(player.x, player.y);
-        Snake_updateAll(player.x, player.y);
-        Bullet_updateAll();
+        PROF_START(PROF_SPRUPDATE);
+        Spr_flush();
+        PROF_STOP(PROF_SPRUPDATE);
 
-        if (--spawnTimer <= 0)
-        {
-            Enemy_spawnAtEdge();
-            spawnTimer = SPAWN_INTERVAL;
-        }
+        // Depurador de gráficos (sólo con PORT_DEBUG_GFX, ver inc/gfxdebug.h).
+        GfxDebug_frame();
 
-        if (--snakeSpawnTimer <= 0)
-        {
-            Snake_spawnAtEdge();
-            snakeSpawnTimer = SNAKE_SPAWN_INTERVAL;
-        }
-
-        // Auto-aim + auto-fire at the closest enemy: no fire button, same as
-        // playerMovement.rotateShipDirection() + disparo.dispara() in the
-        // original (the ship always shoots at whatever's nearest once loaded).
-        if (closestThreat(player.x, player.y, &targetX, &targetY))
-        {
-            Player_faceTarget(&player, targetX, targetY);
-
-            if (--shootTimer <= 0)
-            {
-                Bullet_fire(player.x + (PLAYER_W / 2), player.y + (PLAYER_H / 2), targetX, targetY);
-                shootTimer = SHOOT_INTERVAL;
-            }
-        }
-
-        // Bullet.OnTriggerEnter's "arana"/"snake" cases: kill on hit, add to
-        // score (globales.kills += 1 * globales.level -- no levels yet, so
-        // just +1 per kill).
-        kills += Bullet_checkHits();
-
-        // Same "touching arana/snake/snakeBody ends the run" rule as
-        // playerMovement.OnTriggerEnter -> gameControl.finishGame(). There's
-        // no game-over screen yet (see README), so this just restarts, same
-        // as ovni-megadrive's maze loop restarting on its win condition.
-        if (Enemy_collides(player.x, player.y, PLAYER_W, PLAYER_H) ||
-            Snake_collides(player.x, player.y, PLAYER_W, PLAYER_H))
-            newGame();
-
-        SPR_setPosition(playerSprite, player.x, player.y);
-        SPR_setFrame(playerSprite, player.facing);
-        drawScore();
-        VDP_showFPS(FALSE, 33, 0);
-        SPR_update();
-
+        PROF_START(PROF_VBLANK);
         SYS_doVBlankProcess();
+        PROF_STOP(PROF_VBLANK);
+        PROF_CPU();
     }
 
     return 0;

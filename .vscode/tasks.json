@@ -20,7 +20,9 @@
         {
             "label": "SGDK: run in BlastEm",
             "type": "shell",
-            "command": "blastem out/rom.bin",
+            // -r E fuerza region PAL: el port esta calculado para 320x240 a 50 Hz
+            // (ver docs/PORT_AUDIT_GML.md). En NTSC se recorta el campo y corre un 20% rapido.
+            "command": "blastem -r E out/rom.bin",
             "problemMatcher": [],
             "dependsOn": "SGDK: build"
         }
