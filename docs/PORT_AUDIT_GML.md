@@ -32,7 +32,7 @@ Desde el 2026-11-15 el port sigue a MonsterLite por bloques: su estado está en 
 
 **Bucle.** `oControles` arranca (`scrRead`, `scrInit`, `room_goto(_1)`) y lee input cada step. `oMenu` → `startGame()`: limpia enemigos, centra la cámara, `global.kills = 0`, `global.malosCounter = 0`, crea `oPlayer` en el centro del room y **un** `oCabeza1`. Morir (`mataPlayer`) vuelve al menú.
 
-**Jugador** (`oPlayer`, 231 líneas). Movimiento directo sin inercia: `acc = 6` px/frame sumado por eje según D-Pad (el original lee flechas de teclado o joystick), **sin aceleración ni fricción**. Wrap en los cuatro bordes con margen `offSet = 15` (`stPlayerMovement`). Apunta **automáticamente** al enemigo más cercano (`instance_nearest(x,y,oMalo)` → `direction`) y dispara solo, sin botón. Mientras existe un `oLaser` el jugador queda inmóvil (`laserState`). El sprite se dibuja rotado de forma continua (`image_angle = direction - 90`).
+**Jugador** (`oPlayer`, 231 líneas). Movimiento directo sin inercia: `acc = 6` px/frame sumado por eje según D-Pad (el original lee flechas de teclado o joystick), **sin aceleración ni fricción**. Wrap en los cuatro bordes con margen `offSet = 15` (`stPlayerMovement`). Apunta **automáticamente** al enemigo más cercano (`instance_nearest(x,y,oMalo)` → `direction`) y dispara solo, sin botón. Mientras existe un `oLaser` el jugador queda inmóvil (`laserState`). **El port nunca lo implementó** (`Player_update` se llama siempre, sin mirar si hay láser) y la divergencia no estaba anotada; desde el 2026-11-15 coincide con MonsterLite, que tampoco congela (ver "MonsterLite", bloque 2). El sprite se dibuja rotado de forma continua (`image_angle = direction - 90`).
 
 **Disparo.** Cadencia por contador `controlTime`. Con munición (`global.playerBulletsCounter > 0`) dispara el arma de `global.weapon_index` y gasta 1; sin munición dispara la bala por defecto `oBulletThin`, **infinita**, con `controlTime = 12`. Cada disparo con arma sacude la pantalla (`stShake`).
 
@@ -2240,7 +2240,7 @@ Desde el 2026-11-15 la fuente de verdad es **MonsterLite** (Unity, C#); el GML p
 | Bloque | Estado |
 |---|---|
 | 1. Estructura de partida (puntuación `u32`, niveles, oleadas por tiempo) | ✅ hecho (2026-11-15) |
-| 2. Jugador | ⏳ pendiente (Q6, Q7, Q8) |
+| 2. Jugador | ✅ hecho (2026-11-15), Q8 incluida tras la decisión del usuario sobre el depurador |
 | 3. Armas y munición | ⏳ pendiente (Q9-Q12) |
 | 4. Economía en partida | ⏳ pendiente (Q11) |
 | 5. Pantallas | ⏳ pendiente (Q13-Q16) |
@@ -2298,15 +2298,160 @@ Un cuarto gusano además **no cabe en VRAM**: arranca con `VRAM: 1436 de 1425 ti
 | Las oleadas de power-ups (3, 4, 6, 16, 19-21) no crean nada todavía | Son del bloque 7 | De momento la bomba, los rayos y las réplicas siguen saliendo por `generaPaquete()` del GML al morir cada cabeza |
 | La oleada 27 no enseña "!!!" | Es del bloque 9 | — |
 | La metralla del GML (`oDestro`) también puntúa `level` | No existe en MonsterLite; con la regla de Q5 toda baja suma `level` | — |
-| La nave aparece en el centro del GML, no en (160, 69) | Es del bloque 2 (Q6) | — |
+| La nave aparece en el centro del GML, no en (160, 69) | Es del bloque 2 (Q6) | Resuelto en el bloque 2: nace en (160, 17), ver abajo |
 | Giro, IA, aparición de 75 f y hp siguen siendo del GML | Son del bloque 8 | El enemigo va a la velocidad de MonsterLite pero gira como en el GML. Los eslabones del gusano siguen separados por `stepdelay` frames, así que a la velocidad del nivel 9 (hasta 3,92 px/f) quedan más separados que antes (hasta ~24 px); las migas de MonsterLite, cada 8 px, son del bloque 8 |
 | HUD provisional: cifras grandes sin la palabra SCORE en grande, y "LV / UP / LAST / SCORE" con la fuente del sistema | La fuente grande no tiene C ni R; el HUD definitivo es el bloque 9 (Q16) | Se lee mal sobre los fondos con mucho detalle, igual que el LAST de antes. LAST pasa a ser la mejor puntuación de la sesión |
 | La cuenta de bajas (`g_kills`) sigue existiendo aparte de la puntuación | La usan el desbloqueo por récord de las armas del GML (40/60/80/100), que según Q9 **convive** con la tienda de MonsterLite y se queda, y el interludio KILLS/TOP hasta el bloque 5 | El interludio y el número volador de la cabeza enseñan bajas, no puntuación |
+
+### Bloque 1: dos correcciones tras la verificación (2026-11-15)
+
+**La caja envolvente del gusano dejaba fuera la cabeza tras un salto.** En el estado de vagar del GML (`stWalkingA1W`), al tocar un agujero la IA lleva la cabeza al agujero 0 (`Entity_updateAI`). La caja del gusano (`bbX0..bbY1`) se recalcula cada 4 frames con un margen que sólo cubre el avance, así que tras el salto la cabeza, y luego cada eslabón que pasa por el salto, podían quedar hasta 3 frames fuera de la caja. Durante esos frames no chocaban con la nave (`Snake_collides`) ni con las balas (`Snake_hit*`), y la nave no podía apuntarles (`Snake_closest`). Lo encontró el verificador del bloque 1 (partes a 48 px fuera); el comentario de `src/snake.c` decía que nunca quedaba fuera un contacto.
+
+Arreglo: `Entity_updateAI` devuelve si ha llevado la entidad al agujero 0, y el gusano recalcula la caja **cada frame** desde el salto hasta que ha recorrido el cuerpo entero (eslabones × `stepdelay`: 72 y 50 frames). Sólo cuenta el primer salto de una racha. Mientras el gusano vaga encima del agujero 0, la IA lo devuelve al centro cada frame, pero esas posiciones caben en ±4 px y el margen las cubre. Recalcular durante toda la racha (hasta 500 frames) costaría sin hacer falta.
+
+Comprobado con la instrumentación del verificador ampliada (cabeza y eslabones contra la caja, los cuatro lados, cada frame), en el arnés de estrés con el nivel fijado en 9 (la velocidad máxima) durante 6000 frames: **0 partes fuera** en 1525 saltos (con el anillo del GML), en 2625 (con el hexágono del bloque 2) y en 3755 (bloque 2 terminado). Control con el HEAD y la misma instrumentación: 14 fuera en 1196 saltos, todas de la cabeza, hasta 107 px. El piloto del verificador (`v_pilot_bb.py`) no sirve para esto: sus partidas duran unos 180 frames y el gusano no llega a vagar (antes ataca 250).
+
+**`tools/measure.sh` ya no medía el caso peor.** El arnés llena la arena con el pool de gusanos (3) al empezar, pero las oleadas sólo lo reponían hasta el tope de MonsterLite del nivel en curso (2 hasta el nivel 9). Con `PORT_STRESS` el tope es ahora el pool (`mlSnakeCap`, `src/game.c`). Medido: 540/600 y 17 bajas antes; **483/600 y 21 bajas** después, igual que la medida con el tope forzado del bloque 1 (484/21). La caja exacta tras el salto no cambia la cifra. La línea base del verificador (`.claude/agents/verificador.md`) pasa a la del bloque 2, abajo.
+
+### Bloque 2: jugador
+
+Respuestas del usuario (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`): Q6 hexágono de MonsterLite centrado en pantalla, con la nave en la misma posición respecto al hexágono; Q7 4 px/f normalizado; Q8 el tiempo sólo corre con B pulsado. Q8 se paró en una primera entrega porque B ya tenía uso en partida (el depurador de gráficos). El usuario decidió después, en las "Decisiones añadidas durante el bloque 2": con el panel del depurador abierto el tiempo no se congela y B sigue siendo del depurador. Confirmó además la aparición en (160, 17), aunque quede bajo el HUD provisional hasta el bloque 9, y la nave mirando arriba al nacer.
+
+**Lo que hace ahora el port:**
+
+| Qué | MonsterLite | Port | Dónde |
+|---|---|---|---|
+| Velocidad | rama de teclas: `speed` 0.2 u por tick de `FixedUpdate` [prefab player] en cada eje, sin inercia; en diagonal no normaliza (5,66 px/f) | 4 px/f (exacto) en horizontal y vertical; en diagonal 181/64 = 2,828 px/f por eje, 3,9996 px/f en total (−0,01 %), con constantes (Q7) | `Player_padDelta` (`src/player.c`), `ML_PLAYER_SPEED*` (`inc/arena.h`) |
+| Wrap | toroidal en los bordes exactos de la cámara (`S/playerMovement.cs:129-146`) | margen 0 (`PLAYER_WRAP_OFFSET`, antes 3 px del GML) | `Entity_wrapPlayfield` |
+| Aparición | `highPos` = (W/2, H/1.4) (`S/gameControl.cs:156`); el hexágono va en `posH` = (W/2, H − H/1.4): la nave nace (2/1.4 − 1) × 12 u = 5,14 u = **102,9 px por encima del centro del hexágono** | hexágono centrado (Q6) → **(160, 17)** | `ML_PLAYER_SPAWN_*`, `Player_init` |
+| Colisión | `SphereCollider` de radio 0.18 [prefab], escala 1 → 3,6 px | círculo de 3,6 px: con distancias enteras, `d² ≤ 12` (exacto: no hay ningún d² entero entre 12 y 12,96), contra las cajas de los enemigos y de lo que hay en el suelo. La distancia es al último píxel de la caja (semiabierta, `bx + bw − 1`): en la primera entrega se medía a `bx + bw` y la nave llegaba a 4 px por la derecha y por abajo frente a 3 por la izquierda y por arriba (lo midió el verificador) | `Coll_circleBox` (`inc/collision.h`), `Enemy_collides`, `Snake_collides`, `Pow_collect` |
+| Muere al tocar | `arana`, `snake`, `snakeBody` | igual (ya lo era) | — |
+| Agujeros | `AgujerosPadre`: seis hijos (escala 1.1 cada uno; la del padre es 1) en (−2, 1), (0, −2), (0, 2), (2, −1), (−2, −1), (2, 1) u, por orden de `m_Children`; el grupo en `posH` | los seis, en ese orden, con el hexágono centrado: (120, 100), (160, 160), (160, 80), (200, 140), (120, 140), (200, 100). No matan (ya era así) | `src/hole.c` |
+| Láser | `isLaserState` nunca se pone a `true`: las dos líneas que lo hacen están comentadas (`S/disparo.cs:76, 84`), así que la nave no se congela | no se congela. **Nunca lo hizo**: el GML sí (`laserState`), pero el port no lo implementó y no estaba anotado (ver "Mecánicas del original") | — |
+| Congelación al soltar | sin dedo en pantalla y pasado el "ARENA!", `Time.timeScale = 0` (ver abajo) | sin B pulsado y pasados 25 f de partida, se para todo menos el HUD, con el aviso "HOLD B" (Q8) | `timeStopped`, `stoppedUpdate` (`src/game.c`) |
+| Dónde nacen los enemigos | `posHoles[Random.Range(0, posHoles.Count)]`, un agujero al azar, arañas (`S/enemyController.cs:124`) y gusanos (`:150`) | igual. Antes las arañas nacían todas en el último agujero, la regla del GML (`oSpider/Create_0`) | `Hole_spiderSpawn`, `Hole_snakeSpawn` |
+
+**El pivote del GML** (`oPivot`, arma de las bolas) se movía con `acc = 6`, igual que la nave, para ir pegado a ella. Ahora se desplaza con `Player_padDelta`, lo mismo que la nave.
+
+**Los agujeros, en VRAM.** Con el algoritmo de antes, el hexágono pedía 108 celdas compartidas (hoy eran 33) y quedaba 1 tile libre. Se cambian dos cosas en `src/hole.c`:
+
+- Sólo se suben y se pintan las celdas del bloque de 8×8 que tienen algún píxel en la variante normal o en la roja: 43 de 64 por variante. Las esquinas vacías ya no tapan al vecino.
+- Una celda sólo se compone si **dos agujeros tienen dibujo** en ella: 30 con el hexágono.
+
+Total de los agujeros: de 64 + 64 + 33 = 161 tiles a 43 + 43 + 30 = **116**. Más 10 para el texto encima de los agujeros (abajo). `nextTile` pasa de 1440 a **1405**: 1389 de 1425 tiles de usuario, **36 libres** (antes 1). `loadedCount` sigue en 105 (`MAX_LOADED` 160). Las dos zonas de VRAM sobrante (`VTile_allocSpare`) están llenas.
+
+**Lo que el menú pinta encima de los agujeros.** Con el hexágono en el centro, el menú pinta sobre los agujeros en tres sitios. Una celda del plano sólo tiene un tile, así que donde lo pintado es transparente se veía el plano B y el agujero salía cortado en rectángulo:
+
+- **El logo del splash** (7×7 celdas, columnas 17-23 y filas 11-17): 40 de sus 49 celdas caen sobre algún agujero, y salían los seis cortados. Lo vio el verificador. Ahora cada una de esas celdas se compone (agujeros debajo, logo encima: comparten PAL2) y se sube **encima del propio tile del logo**. El logo sólo se ve en el splash y nadie más usa sus tiles: **0 tiles nuevos**. Se compone siempre desde el logo de la ROM. Esas celdas pasan enteras a prioridad alta, también la parte de agujero; en el splash no hay sprites. `drawLogo`, `src/menu.c`.
+- **La fila de CREDITS** (fila 21, en el splash y en el interludio): cruza la parte de abajo de tres agujeros, con 8 letras sobre dibujo de agujero. En el HEAD ya cortaba los dos agujeros del anillo por los que pasaba.
+- **El aviso HOLD B** (fila 20): cae sobre el agujero de abajo, 5 letras.
+
+Para CREDITS y HOLD B, `Hole_textRow` compone cada letra que cae sobre un agujero: los agujeros debajo y la letra encima. La letra se lee de la VRAM, donde SGDK dejó la fuente (en la ROM va comprimida). La fuente del sistema sólo usa el índice 15 y se ve blanca, así que la letra se pinta con el blanco de la paleta de los agujeros (0x0EEE, índice 8). Los dos textos nunca están a la vez en pantalla, así que comparten **10 tiles** (`HOLE_TEXT_TILES`). Es el único gasto de VRAM de esta parte, y servirá también para los mensajes del bloque 9 sobre el hexágono. Si un texto pidiera más, las letras que sobran salen con el tile de la fuente, como antes.
+
+Lo demás del menú no corta nada que se vea:
+
+- **La banda del interludio** va en el plano B con prioridad alta, filas 12-19, y tapa los agujeros por diseño (el menú del original se dibuja encima del room).
+- **KILLS, TOP y NEXT** (filas 13-18) quedan dentro de la banda. Mientras la banda crece (unos 23 frames) las primeras letras pueden cortar el borde de los agujeros laterales. Ya pasaba en el HEAD; no se ha cambiado.
+- **Los iconos de arma** (filas 24-27), la marca `^` (fila 28) y la marquesina (fila 29) quedan por debajo del último agujero (fila 23).
+
+El plano A se mueve de 8 en 8 px. En X los tres valores del hexágono caen en la rejilla, pero los cuatro agujeros de los lados (y = 100 y 140) quedan a 4 px de una fila. Se pintan **4 px hacia fuera** del centro (a 96 y 144): el hexágono queda simétrico. Redondeando hacia dentro, los dos agujeros de cada lado se montaban 19 px (mirado en una maqueta). La posición lógica (nacimiento, IA, colisión) es la exacta.
+
+**Rendimiento.** `tools/measure.sh`:
+
+| Build | Vueltas de 600 | Bajas |
+|---|---|---|
+| Sólo las correcciones del bloque 1 | 483 | 21 |
+| Bloque 2, primera entrega | 522 | 17 |
+| Bloque 2 terminado | **484** | **24** |
+
+Ninguna de estas cifras mide coste de código: cambia la partida del arnés. En la primera entrega cambiaron los agujeros (juntos en el centro), la nave (arriba) y la recogida con el círculo, que cambia qué paquetes coge y con ellos la munición. En la segunda, las arañas pasan a nacer repartidas por los seis agujeros en vez de todas en uno: hay más bajas y más trabajo por frame. Es el caso peor del juego tal como queda. Controles en copias del scratchpad:
+
+- nave en el centro y hexágono: 518/19;
+- nave en el centro y el anillo viejo: 494/22;
+- bloque 2 terminado, pero con las arañas en el último agujero: **518/17**, lo mismo que la primera entrega.
+
+La congelación, el texto compuesto y el arreglo del radio no cuestan nada medible. Con `PORT_STRESS` el tiempo no se congela. **Línea base nueva: 484/24.**
+
+Visto de paso, sin relación con este bloque: al ponerse rojo el agujero del primer gusano (unos 97 frames tras empezar) se pierden 2 frames seguidos. En el HEAD se perdían 3 en el mismo momento.
+
+**Q8: el tiempo sólo corre con B pulsado.** Qué hace MonsterLite: en partida, si no hay ningún dedo en pantalla y `HUD.counter >= 60`, `Time.timeScale = 0`. Cualquier toque, o pasar al GAMEOVER, lo devuelve a 1 (`S/gameControl.cs:265-301`). Con `timeScale` a 0, Unity deja de llamar a `FixedUpdate`:
+
+- no corren `moveEnemies`, `move()`, `rotateShipDirection` ni `dispara` (`S/gameControl.cs:333-350`): **la nave no se puede mover ni girar ni disparar**, y los enemigos no se mueven;
+- la física se para: las balas, con `Rigidbody`, se quedan quietas;
+- las corrutinas con `WaitForSeconds` (las esperas de `startGame`, el bucle de oleadas y el cartel de nivel) también se paran;
+- las animaciones (`Animator`) y lo que se mueve con `Time.deltaTime` se paran, porque `deltaTime` vale 0.
+
+`Update` sigue corriendo cada frame, y lo que cuenta frames y no tiempo **no se para**:
+
+- el temporizador de IA de `enemyMov`;
+- la vida de paquetes y monedas (`S/paqueteScr.cs:39`, `S/Coin.cs:108`);
+- el impacto instantáneo de LASER y MOIRE (`S/RaycastScr.cs:33`);
+- las bolas CIRCULAR sueltas (`S/circularScr.cs:57`);
+- los rayos, `HUD.counter` y las sacudidas (corrutinas con `yield return 0`, un paso por frame, `S/cameraScript.cs:15-76`).
+
+La música baja de tono 0,1 por frame. El aviso es la textura `dedo` más "KEEP YOUR FINGER\n ON SCREEN!" en y = H − H/2.9 = 157 px (`S/HUD.cs:489-497`).
+
+**En el port** (`timeStopped` y `stoppedUpdate`, `src/game.c`):
+
+- **Cuándo.** Sin B pulsado (`ML_TIME_BUTTON`) y pasados los **25 primeros frames** de cada partida (`ML_FREEZE_GRACE_F`). `HUD.counter` vuelve a 0 fuera de partida y sube una vez por llamada a `OnGUI` mientras sale "ARENA!", hasta 60 (`S/HUD.cs:163-166, 470-472`). Unity llama a `OnGUI` al menos dos veces por frame (Layout y Repaint): 30 frames de 60 Hz, 25 f. Es **deducido, no medido**: con una sola llamada por frame serían 50 f, y con toques, menos de 25. Como la nave entra a los 40 f y la espera de arranque también se para, sin B la nave no aparece hasta que se pulsa. En MonsterLite pasa lo mismo: la espera de 0,8 s es escalada.
+- **Qué se para.** Todo lo que hay hoy en el port menos el HUD:
+  - los enemigos (movimiento, IA del GML y su aparición de 75 f);
+  - la nave (no se mueve, no apunta, no dispara);
+  - las balas, la metralla, el pivote y las réplicas;
+  - la secuencia de arranque y las oleadas;
+  - las explosiones;
+  - los números que vuelan al HUD (en MonsterLite van con `deltaTime`);
+  - el latido de lo que hay en el suelo (en MonsterLite, `Animator`);
+  - la sacudida.
+
+  Las colisiones tampoco se comprueban (con la física parada, en Unity no salta ningún trigger).
+- **Lo de `Update` que no se para en MonsterLite todavía no existe en el port**: caducidad de paquetes y monedas (bloque 4), LASER y MOIRE de impacto instantáneo y bolas CIRCULAR (bloque 3), rayos (bloque 7) e IA de `enemyMov` (bloque 8). Cada uno de esos bloques tiene que sacar lo suyo del corte de `playUpdate`. Está escrito en el comentario de `timeStopped`.
+- **La nave no se agranda al congelar.** En MonsterLite, cada frame congelado reproduce `landingAnim` (`gameControl.cs:270`). Como el `Animator` de `player.prefab` va en modo Normal (`m_UpdateMode` 0), la nave se queda a escala ×4 (4,00 × 3,82) mientras el tiempo está parado, y al reanudar vuelve a ×1 en 0,23 s. El VDP no escala sprites: queda pendiente para el bloque 12 (efectos), con frames pre-escalados o descartado. **Divergencia**.
+- **La sacudida** de MonsterLite seguiría, pero la del port es todavía la del GML (`stShake`, que vive en el Step de `oPlayer`) y se para con la nave. El desplazamiento se aplica al colocar cada sprite (`inc/spr.h`), así que mover el plano con los sprites quietos los descuadraría. La sacudida de MonsterLite es del bloque 12.
+- **El aviso**: "HOLD B" con la fuente del sistema, centrado, en la fila 20 del plano A (160 px; MonsterLite empieza en 157). Va compuesto encima del agujero de abajo (ver arriba). La mano (`dedo`) no tiene equivalente con el pad y no se porta. La música de partida no existe todavía (bloque 12), así que tampoco hay cambio de tono.
+- **No se congela con `PORT_STRESS` ni con `PORT_BENCH`**: el arnés mide el caso peor con todo en marcha y `tools/measure.sh` no pulsa B, así que mide lo mismo que antes sin cambiar el script. Los pilotos que juegan una partida normal por el depurador (los del verificador) tienen que mantener B pulsado.
+- **Con el panel del depurador de gráficos abierto** (`GFXDEBUG=1`) tampoco se congela, por decisión del usuario: B sigue siendo del depurador (plano B). Con el panel cerrado, B vuelve a ser el del tiempo. `GfxDebug_panelOpen`, `src/gfxdebug.c`.
+
+**Divergencias que introduce este bloque:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| En diagonal, 4 px/f en vez de 5,66 | Decisión del usuario (Q7). **Divergencia deliberada** | La diagonal es un 29 % más lenta que en MonsterLite; las ocho direcciones van igual |
+| Hexágono centrado, no 51 px por debajo del centro | Decisión del usuario (Q6) | Todo queda 51 px más arriba que en el dispositivo apaisado |
+| La nave nace en (160, 17), debajo del HUD provisional | Consecuencia de Q6: 102,9 px por encima del centro del hexágono. Confirmado y aceptado por el usuario hasta el bloque 9 | Al empezar, la nave queda tapada en parte por "LAST" (fila 2) y la cifra de BULLETS: blanco sobre blanco, sólo se distingue la sombra. En cuanto se mueve se ve |
+| Los cuatro agujeros de los lados se pintan 4 px más lejos del centro | Rejilla de 8 px del plano A | Sólo visual: nacimiento, IA y colisión usan la posición exacta |
+| Círculo de la nave contra las **cajas** de los enemigos del GML | Las esferas de los enemigos (8,4 y 9,6 px) son del bloque 8 | El contacto llega a 3 px del borde de la caja en recto, por los cuatro lados, y a 2 + 2 en diagonal. Desde arriba la caja vieja de 7×11 ya mataba a 6 px: ahora se puede pasar más cerca por arriba. Los 12 px entre centros de MonsterLite (araña) llegan con el bloque 8 |
+| La recogida usa el círculo contra la caja de paquete del GML (11×11) | La caja de 20×20 de MonsterLite es del bloque 4 | Hay que pasar más cerca que en MonsterLite, y que antes con la caja de 7×11 |
+| El orden de los agujeros es el de `m_Children` del prefab | MonsterLite no depende del orden; la IA del GML sí (bloque 8) | El enemigo que vaga salta a (120, 100), el agujero 0. Las arañas ya no dependen del orden: nacen en uno al azar, como en MonsterLite (resuelto en esta entrega) |
+| La nave nace **mirando arriba**; en MonsterLite, a la derecha (`Quaternion.identity`) | Decisión del usuario (bloque 2). **Divergencia deliberada** | Sólo se ve los 50 f hasta que sale el primer gusano |
+| La congelación es con B y no con el dedo; aviso "HOLD B" sin la mano | Decisión del usuario (Q8): no hay pantalla táctil | Hay que mantener B pulsado para jugar |
+| La gracia antes de la primera congelación es de 25 f | Deducida (dos llamadas a `OnGUI` por frame), no medida: en MonsterLite depende de cuántas veces llame Unity a `OnGUI` | Entre 0 y 25 f de diferencia con el original al empezar |
+| Con el tiempo parado también se paran la sacudida (todavía la del GML) y las cosas del GML que aún no tienen su versión de MonsterLite | Ver arriba: lo de `Update` llegará con sus bloques | Nada cuenta mientras está parado: lo del suelo no caduca (tampoco caduca con el tiempo en marcha, bloque 4) |
+| Con el panel de `GFXDEBUG=1` abierto no se congela | Decisión del usuario | Sólo en la build de depuración |
+| El texto sobre los agujeros (CREDITS, HOLD B) va en blanco de la paleta de los agujeros y sus celdas enteras con prioridad alta | Una celda del plano sólo tiene un tile y una paleta | En esas celdas, un sprite que pase por encima del agujero queda debajo del dibujo del agujero mientras se ve el texto |
+| El sexto agujero reconstruido del GML (558, 754) ya no se usa | Lo sustituye el hexágono de MonsterLite | — |
 
 ## Pruebas realizadas
 
 | Fecha | Prueba | Resultado |
 |---|---|---|
+| 2026-11-15 | Bloque 2 terminado: `make` completo, `GFXDEBUG=1` y `PORT_BENCH=1` | ✅ 0 avisos en los tres |
+| 2026-11-15 | Q8 por RAM (`startFrames`, `graceFrames`, `holdShown`, nave y cabeza de gusano) | ✅ sin B se para a los 25 f (la secuencia de arranque queda en 25 y la nave no entra); con B sigue; al soltar B la cabeza no se mueve en 60 f y el aviso está puesto; al volver a pulsar, sigue y el aviso se quita |
+| 2026-11-15 | Q8 con `GFXDEBUG=1` | ✅ con el panel abierto y sin B la cabeza se mueve; B enciende y apaga el plano B; al cerrar el panel, sin B se congela con el aviso |
+| 2026-11-15 | Logo del splash sobre el hexágono | ❌ seis agujeros cortados en rectángulo (verificador); ✅ compuesto en los tiles del logo, agujeros enteros, 0 tiles nuevos |
+| 2026-11-15 | CREDITS y HOLD B sobre los agujeros | ✅ las letras van encima del agujero sin cortarlo, en el splash, el interludio y la partida; con B pulsado la fila vuelve a tener sólo agujeros |
+| 2026-11-15 | Radio con la caja semiabierta, en las cinco direcciones | ✅ muere a d² = 9 (3 px) por arriba, abajo, izquierda y derecha, y a d² = 8 en diagonal (vive con 16 y con 18) |
+| 2026-11-15 | Movimiento con B pulsado, frame a frame contra el modelo | ✅ 113 frames, 0 fuera del modelo, wraps por los cuatro bordes sin margen |
+| 2026-11-15 | `tools/measure.sh`, bloque 2 terminado | ✅ **484/600, 24 bajas** (las arañas nacen repartidas); control con las arañas en el último agujero, 518/17 |
+| 2026-11-15 | VRAM, bloque 2 terminado | ✅ `nextTile` 1405 de 1440 (36 libres), `loadedCount` 105 |
+| 2026-11-15 | MonsterLite, bloque 2 y correcciones del bloque 1: `make` | ✅ sin avisos |
+| 2026-11-15 | Caja del gusano tras el salto al agujero 0: arnés de estrés con el nivel fijado en 9, 6000 f, cabeza y eslabones contra la caja cada frame | ✅ 0 fuera en 1525 saltos (anillo del GML), en 2625 (hexágono) y en 3755 (bloque 2 terminado); ❌ control con el HEAD: 14 fuera (la cabeza, hasta 107 px) en 1196 saltos |
+| 2026-11-15 | `tools/measure.sh` (primera entrega del bloque 2) | 540/600, 17 bajas (HEAD) → 483/21 (arnés con el pool de 3 gusanos) → ✅ 522/17 (bloque 2); controles: nave en el centro 518/19, nave en el centro y anillo viejo 494/22 |
+| 2026-11-15 | Movimiento de la nave por RAM, frame a frame, contra un modelo en Python (213 frames en dos secuencias) | ✅ 0 frames fuera del modelo: 4 px/f en recto, 181/64 por eje en diagonal; wraps sin margen 320 → 0, 0 → 320, 3,42 → 240 y 241,9 → 0. 2 frames perdidos al ponerse rojo el agujero del primer gusano (3 en el HEAD) |
+| 2026-11-15 | Aparición de la nave | ✅ (160, 17) leída por RAM a los 45 f; captura: tapada en parte por "LAST" del HUD provisional, visible al bajar a (160, 57) |
+| 2026-11-15 | Radio de 3,6 px: nave puesta por RAM junto a la cabeza de un gusano, cada vez más cerca | ✅ desde arriba vive con d² = 16 y muere con d² = 9; en diagonal vive con 18 y muere con 8 (la caja vieja mataba ya a 6 px por arriba y a 3 + 3 en diagonal) |
+| 2026-11-15 | VRAM con el hexágono (primera entrega del bloque 2) | ✅ `nextTile` 1440 → 1395 (46 tiles libres, antes 1); `loadedCount` 105; 30 celdas compuestas |
+| 2026-11-15 | Capturas: splash, partida, interludio y segunda partida | ✅ hexágono centrado, sin recortes entre agujeros, reborde rojo al salir un gusano; el interludio y la vuelta a partida reponen los agujeros sin restos de texto |
 | 2026-11-15 | MonsterLite, bloque 1: `make` | ✅ sin avisos |
 | 2026-11-15 | Regla de niveles por RAM (`g_level`, `g_factorLevel`, `g_score` escritos con `set`, un frame) contra un modelo en Python | ✅ 9 de 9: (1,1,2)→2/2, UP 6; (1,1,3)→3/2, UP 8; (2,2,9)→4/4, UP 20; (2,2,5) sin cambio; (13,4096,70000)→17/8192; (14,8192,70000) sin cambio, UP 122880; (14,8192,122880)→15/16384 |
 | 2026-11-15 | Oleadas con `kills % 40` fijado (arnés en el scratchpad, 3000 f) | ✅ índice 0: 138 oleadas, 277 gusanos pedidos (1 + 2 × 138), 0 arañas; índice 39: 127 oleadas, 113 gusanos (esperado 115), 93 arañas (esperado 120; histograma de `r` sin huecos sistemáticos, el xorshift de SGDK da 0,947 arañas por oleada en su periodo entero) |

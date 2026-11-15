@@ -13,6 +13,7 @@
 #include "audio.h"
 #include "shake.h"
 #include "debris.h"
+#include "player.h"
 
 typedef struct
 {
@@ -311,12 +312,22 @@ u16 Proj_update(u16 *snakeKills)
 
     // oPivot/Step_0: el pivote se mueve con el mismo input que la nave y gira
     // la órbita 2 grados por cada dirección pulsada.
+    //
+    // En el GML el pivote y la nave avanzan los dos acc = 6, o sea que el
+    // pivote va siempre pegado a la nave. Desde el bloque 2 de MonsterLite la
+    // nave va a 4 px/f normalizados, así que el pivote se desplaza lo mismo
+    // que ella (Player_padDelta) para seguir pegado.
     if (pivotAlive)
     {
-        if (playerPad & BUTTON_LEFT)  { pivotX -= PLAYER_ACC; pivotT -= PIVOT_SPIN; }
-        if (playerPad & BUTTON_RIGHT) { pivotX += PLAYER_ACC; pivotT += PIVOT_SPIN; }
-        if (playerPad & BUTTON_UP)    { pivotY -= PLAYER_ACC; pivotT -= PIVOT_SPIN; }
-        if (playerPad & BUTTON_DOWN)  { pivotY += PLAYER_ACC; pivotT += PIVOT_SPIN; }
+        fix16 dx, dy;
+
+        Player_padDelta(playerPad, &dx, &dy);
+        pivotX += dx;
+        pivotY += dy;
+        if (playerPad & BUTTON_LEFT)  pivotT -= PIVOT_SPIN;
+        if (playerPad & BUTTON_RIGHT) pivotT += PIVOT_SPIN;
+        if (playerPad & BUTTON_UP)    pivotT -= PIVOT_SPIN;
+        if (playerPad & BUTTON_DOWN)  pivotT += PIVOT_SPIN;
         pivotT = F16_normalizeAngle(pivotT);
 
         // oPivot/Step_0 llama a stPlayerMovement(), o sea que el pivote hace

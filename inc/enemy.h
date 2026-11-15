@@ -32,7 +32,9 @@ void Enemy_spawn(void);
 
 void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py);
 
-bool Enemy_collides(s16 px, s16 py, s16 pw, s16 ph);
+// TRUE si alguna araña visible toca la nave: el círculo de MonsterLite de
+// centro (cx, cy) y radio 3,6 px (ML_PLAYER_R2) contra la caja de la araña.
+bool Enemy_collides(s16 cx, s16 cy);
 
 // Posición (origen) de la araña viva más cercana a (x, y) en píxeles.
 // *best es la distancia AL CUADRADO del mejor candidato que llevamos, en

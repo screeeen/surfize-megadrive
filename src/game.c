@@ -96,6 +96,21 @@ static u16 startFrames;
 static u16 waveTimer;
 static bool playerIn;
 
+// El tiempo parado sin B (Q8): frames de partida que lleva el "ARENA!" (la
+// gracia de HUD.counter, ver ML_FREEZE_GRACE_F) y si el aviso está puesto.
+static u16 graceFrames;
+static bool holdShown;
+
+// El aviso, con la fuente del sistema en vez del "KEEP YOUR FINGER\n ON
+// SCREEN!" y la mano (textura dedo) de MonsterLite, que no tienen
+// equivalente con el pad. Va centrado y a la altura del original: su Label
+// empieza en y = H - H / 2.9 = 157 px (S/HUD.cs:495-497), que en el plano
+// A, de 8 en 8, es la fila 20 (160 px). Si cambia ML_TIME_BUTTON, cambia
+// este texto.
+#define HOLD_TEXT   "HOLD B"
+#define HOLD_ROW    20
+#define HOLD_COL    (((PLAYFIELD_W / 8) - (sizeof(HOLD_TEXT) - 1)) / 2)
+
 // stCheckWeapon(). Hay que leerlo con cuidado porque tiene un desfase de uno
 // que NO es un despiste del port:
 //
@@ -232,9 +247,18 @@ static void mlCreateSpider(void)
 // GML, que lo crean ellos). Ver docs/PORT_AUDIT_GML.md, "MonsterLite".
 static u16 mlSnakeCap(void)
 {
+#if PORT_STRESS
+    // El arnés de medida (tools/measure.sh) tiene que medir el CASO PEOR, que
+    // es el pool lleno: 3 gusanos, como del nivel 10 en adelante. Con el tope
+    // de MonsterLite del nivel en curso (2 hasta el nivel 9), las oleadas
+    // dejaban de reponer el tercero en cuanto moría y la medida salía
+    // optimista (540/600 frente a 484/600 con 3, bloque 1).
+    return MAX_SNAKES;
+#else
     const u16 cap = ((g_level / 10) * ML_SNAKES_PER_10LV) + ML_SNAKES_BASE;
 
     return (cap > MAX_SNAKES) ? MAX_SNAKES : cap;
+#endif
 }
 
 static void mlCreateSnake(void)
@@ -382,6 +406,10 @@ void Game_start(void)
     sprHide(playerSprite);
     startFrames = 0;
     waveTimer = 0;
+    graceFrames = 0;
+    // El aviso de la partida anterior ya no está: Menu_leave repone todas las
+    // filas del plano A con sólo los agujeros.
+    holdShown = FALSE;
 
     // toGame(): "globales.kills = 0; globales.level = 1; factorLevel = 1"
     g_score = 0;
@@ -447,11 +475,10 @@ void Game_killPlayer(void)
 }
 
 // startGame() de MonsterLite, a los 0,8 s: "Instantiate (player, highPos, ...)".
-// La posición sigue siendo el centro del GML hasta el bloque 2 (Q6).
+// Player_init la pone en highPos respecto al hexágono de agujeros centrado
+// (bloque 2, Q6): (160, 17).
 static void playerEnter(void)
 {
-    // startGame() del GML: el jugador aparece en el centro del room
-    // (global.game_width*0.5, global.game_height*0.5).
     Player_init(&player);
     sprPos(playerSprite,
                     F2I(player.e.x) + PLAYER_SPR_OFF_X,
@@ -508,10 +535,86 @@ static void waitingUpdate(void)
     HUD_update();
 }
 
+// ---------------------------------------------------------------------------
+// El tiempo sólo corre con B pulsado (Q8, bloque 2)
+//
+// MonsterLite pone Time.timeScale = 0 cuando no hay ningún dedo en pantalla,
+// pasado el "ARENA!" (HUD.counter >= 60). Con timeScale a 0 Unity deja de
+// llamar a FixedUpdate y para la física y el tiempo escalado, pero Update
+// sigue cada frame. Lo que hay hoy en el port, repartido así:
+//
+//   - se para (FixedUpdate, física, corrutinas con WaitForSeconds y
+//     animaciones): los enemigos (movimiento, IA del GML y su aparición), la
+//     nave (no se mueve, no gira, no dispara), las balas, la metralla, el
+//     pivote y las réplicas, la secuencia de arranque y las oleadas, las
+//     explosiones, los números que vuelan al HUD (en MonsterLite van con
+//     Time.deltaTime, que vale 0) y el latido de lo que hay en el suelo;
+//   - sigue: el HUD.
+//
+// Lo que en MonsterLite sigue corriendo en Update (caducidad de paquetes y
+// monedas, LASER y MOIRE matando, bolas CIRCULAR persiguiendo, rayos, IA de
+// enemyMov) todavía no existe en el port: cada bloque que lo traiga lo tiene
+// que dejar fuera de este corte. Ver docs/PORT_AUDIT_GML.md, bloque 2.
+//
+// La sacudida de MonsterLite también es de Update, pero la del port es aún
+// la del GML (stShake, que vive en el Step de oPlayer) y se para con la nave:
+// seguir moviendo el plano con los sprites quietos los descuadraría, porque
+// el desplazamiento se aplica al colocar cada sprite (inc/spr.h).
+//
+// No se congela:
+//   - con PORT_STRESS o PORT_BENCH: el arnés mide el caso peor con todo en
+//     marcha y tools/measure.sh no pulsa B, así que mide lo mismo que antes;
+//   - con el panel del depurador de gráficos abierto (decisión del usuario):
+//     B es del depurador mientras el panel está abierto.
+// ---------------------------------------------------------------------------
+static bool timeStopped(u16 pad)
+{
+#if (PORT_STRESS || PORT_BENCH)
+    (void)pad;
+    return FALSE;
+#else
+    if (graceFrames < ML_FREEZE_GRACE_F)
+    {
+        graceFrames++;
+        return FALSE;
+    }
+
+    if (pad & ML_TIME_BUTTON) return FALSE;
+    if (GfxDebug_panelOpen()) return FALSE;
+
+    return TRUE;
+#endif
+}
+
+// Un frame con el tiempo parado: sólo el aviso y el HUD.
+static void stoppedUpdate(void)
+{
+    if (!holdShown)
+    {
+        // Encima de los agujeros sin cortarlos (ver Hole_textRow).
+        Hole_drawTextRow(HOLD_TEXT, HOLD_COL, HOLD_ROW);
+        holdShown = TRUE;
+    }
+
+    HUD_update();
+}
+
 static void playUpdate(u16 pad)
 {
     s16 px, py;
     s16 targetX = 0, targetY = 0;
+
+    if (timeStopped(pad))
+    {
+        stoppedUpdate();
+        return;
+    }
+
+    if (holdShown)
+    {
+        Hole_clearTextRow(HOLD_ROW);
+        holdShown = FALSE;
+    }
 
     if (!startSequence())
     {
@@ -601,8 +704,7 @@ static void playUpdate(u16 pad)
     {
         PowerPickup got;
 
-        if (Pow_collect(px + PLAYER_BOX_OX, py + PLAYER_BOX_OY,
-                        PLAYER_BOX_W, PLAYER_BOX_H, g_weaponIndex, &got))
+        if (Pow_collect(px, py, g_weaponIndex, &got))
         {
             switch (got.type)
             {
@@ -705,9 +807,11 @@ static void playUpdate(u16 pad)
     Game_levelUpgrade();
 
     // oMalo/Collision_oPlayer -> mataPlayer(): vale cualquier enemigo,
-    // incluidos los segmentos del gusano.
-    if (Enemy_collides(px + PLAYER_BOX_OX, py + PLAYER_BOX_OY, PLAYER_BOX_W, PLAYER_BOX_H) ||
-        Snake_collides(px + PLAYER_BOX_OX, py + PLAYER_BOX_OY, PLAYER_BOX_W, PLAYER_BOX_H))
+    // incluidos los segmentos del gusano (en MonsterLite, los tags arana,
+    // snake y snakeBody de playerMovement.OnTriggerEnter). La nave es la
+    // esfera de 3,6 px de MonsterLite; los enemigos, las cajas del GML hasta
+    // el bloque 8.
+    if (Enemy_collides(px, py) || Snake_collides(px, py))
     {
 #if !PORT_STRESS || defined(PORT_STRESS_MORTAL)
         Game_killPlayer();

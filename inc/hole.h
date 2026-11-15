@@ -5,36 +5,26 @@
 #include "arena.h"
 
 // ===========================================================================
-// Agujeros de spawn (oAgujerSuper)
+// Agujeros de spawn (oAgujerSuper del GML, AgujerosPadre de MonsterLite)
 //
-// Instancias colocadas a mano en el room _1, no generadas: el GML las busca
-// con instance_find() y los enemigos nacen en una de ellas (y vuelven a ellas
-// en el estado de vagar, stWalkingA1W). Coordenadas del room escaladas x0.2.
+// Desde el bloque 2 de MonsterLite son los SEIS agujeros del prefab
+// AgujerosPadre, en hexágono, con el hexágono centrado en la pantalla
+// (decisión del usuario, Q6): centros en (120, 100), (160, 160), (160, 80),
+// (200, 140), (120, 140) y (200, 100). Ver src/hole.c.
 //
-// EL SEXTO AGUJERO ES UNA RECONSTRUCCIÓN, no sale del GML. El room que hay en
-// surfize_changes trae exactamente CINCO instancias de oAgujerSuper
-// (verificado con grep, con el parseo de capas y con instanceCreationOrder),
-// pero puestos como anillo alrededor del centro del room dejan un hueco que
-// canta: cuatro separaciones de 55-61 grados y una de 129.
+// Antes eran los cinco oAgujerSuper del room _1 del GML más un sexto
+// reconstruido (558, 754) para cerrar el anillo; esa historia está en
+// docs/PORT_AUDIT_GML.md ("El sexto agujero").
 //
-//      24.8 ->  83.7 :  58.8 grados
-//      83.7 -> 212.5 : 128.8 grados   <-- aqui
-//     212.5 -> 273.5 :  61.0 grados
-//     273.5 -> 328.6 :  55.1 grados
-//     328.6 ->  24.8 :  56.3 grados
+// Los enemigos nacen en un agujero al azar, como en MonsterLite (arañas y
+// gusanos). Lo demás sigue siendo del GML hasta el bloque 8 (la IA): el que
+// vaga va hacia ellos y, al tocar uno, salta al 0.
 //
-// El que falta cae a 148 grados y radio 288, o sea (556, 752), que es
-// prácticamente el espejo de (558, 446) respecto del centro: (558, 754). Eso
-// es lo que se pone. Si la posición de verdad es otra, se cambia esta línea.
-//
-// Va el PRIMERO de la tabla a propósito: el único comportamiento determinista
-// que depende del orden es dónde nacen las arañas, que el original saca del
-// ÚLTIMO agujero, y poniéndolo delante ese sigue siendo el mismo de siempre.
-//
-// El dibujo (sprAgujero, 197x197 a escala 1.3 -> 51 px) va al plano A como
-// bloque de 8x8 tiles, no como sprite: cinco sprites de ese tamaño serían 20
-// sprites de hardware de los 80 del VDP. Coste: la posición se ajusta a la
-// rejilla de tiles, hasta 4 px respecto al original.
+// El dibujo (sprAgujero, 197x197 a escala 1.3 -> 51 px, decisión 3: arte del
+// GML) va al plano A como bloque de 8x8 tiles, no como sprite: seis sprites
+// de ese tamaño serían 24 sprites de hardware de los 80 del VDP. Coste: la
+// posición se ajusta a la rejilla de tiles; en el hexágono, los cuatro
+// agujeros de los lados se pintan 4 px más lejos del centro (ver src/hole.c).
 // ===========================================================================
 #define HOLE_COUNT 6
 
@@ -69,9 +59,8 @@ fix16 Hole_y(u16 i);
 // vuelta: (N-1) - random(N-1).
 u16 Hole_snakeSpawn(void);
 
-// Agujero donde nace una araña. oSpider/Create_0 usa un bucle sin aleatorio
-// (instance_find(oAgujerSuper, i) con i terminando en N-1), así que TODAS las
-// arañas del original nacen siempre en el ÚLTIMO agujero.
+// Agujero donde nace una araña: uno al azar, como createSpider() de
+// MonsterLite. (En el GML nacían todas en el último.)
 u16 Hole_spiderSpawn(void);
 
 // Destino del estado de vagar: instance_find(oAgujerSuper, f - random(f-1))
@@ -80,6 +69,23 @@ u16 Hole_wanderTarget(void);
 
 // TRUE si la caja dada solapa la máscara de algún agujero (place_meeting).
 bool Hole_touching(s16 x, s16 y, s16 w, s16 h);
+
+// Los píxeles de los agujeros en la celda (col, row) del plano, compuestos
+// como se ven (cada uno con su variante). TRUE si algún agujero dibuja en
+// ella; si no, buf queda a cero. Para componer encima lo que el menú pinta
+// sobre los agujeros (el logo, ver src/menu.c).
+bool Hole_cellPixels(s16 col, s16 row, u32 *buf);
+
+// Texto de la fuente del sistema encima de los agujeros sin cortarlos: en
+// buf (una fila del plano A ya rellena con Hole_rowTiles) pone las letras de
+// 's' desde 'col'; las que caen sobre dibujo de agujero van en un tile
+// compuesto (agujero debajo, letra encima). Los espacios dejan lo que hubiera.
+void Hole_textRow(const char *s, u16 col, s16 row, u16 *buf, u16 cols);
+
+// Lo mismo, escribiendo la fila entera (40 columnas) en el plano A de una
+// vez, y su contrario: la fila con sólo los agujeros.
+void Hole_drawTextRow(const char *s, u16 col, s16 row);
+void Hole_clearTextRow(s16 row);
 
 
 

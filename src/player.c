@@ -2,10 +2,12 @@
 
 void Player_init(Player *p)
 {
-    // startGame(): instance_create(global.game_width*0.5, global.game_height*0.5, oPlayer)
+    // startGame() de MonsterLite: Instantiate(player, highPos, ...), que con
+    // el hexágono de agujeros centrado (Q6) cae en (160, 17): ver
+    // ML_PLAYER_SPAWN_* en arena.h.
     Entity_clear(&p->e);
-    p->e.x = FIX16(PLAYFIELD_W / 2);
-    p->e.y = FIX16(PLAYFIELD_H / 2);
+    p->e.x = FIX16(ML_PLAYER_SPAWN_X);
+    p->e.y = FIX16(ML_PLAYER_SPAWN_Y);
     // La nave empieza mirando ARRIBA. Es una desviación del GML a propósito:
     // allí oPlayer/Create_0 no toca direction, así que se queda en el 0 por
     // defecto de GameMaker, que es mirando a la derecha.
@@ -19,15 +21,34 @@ void Player_init(Player *p)
     p->controlTime = SHOOT_INT_FIRST;
 }
 
+void Player_padDelta(u16 pad, fix16 *dx, fix16 *dy)
+{
+    // playerMovement.move: cada flecha suma speed a su eje. Izquierda y
+    // derecha a la vez se anulan, igual que allí.
+    s16 sx = 0, sy = 0;
+    fix16 v;
+
+    if (pad & BUTTON_LEFT)  sx--;
+    if (pad & BUTTON_RIGHT) sx++;
+    if (pad & BUTTON_UP)    sy--;
+    if (pad & BUTTON_DOWN)  sy++;
+
+    // Q7: la misma velocidad en las ocho direcciones.
+    v = (sx && sy) ? ML_PLAYER_SPEED_DIAG : ML_PLAYER_SPEED;
+
+    *dx = (sx < 0) ? -v : ((sx > 0) ? v : 0);
+    *dy = (sy < 0) ? -v : ((sy > 0) ? v : 0);
+}
+
 void Player_update(Player *p, u16 pad)
 {
-    // oPlayer/Step_0: if global.kleft {x -= acc} ... un eje por tecla.
-    if (pad & BUTTON_LEFT)  p->e.x -= PLAYER_ACC;
-    if (pad & BUTTON_RIGHT) p->e.x += PLAYER_ACC;
-    if (pad & BUTTON_UP)    p->e.y -= PLAYER_ACC;
-    if (pad & BUTTON_DOWN)  p->e.y += PLAYER_ACC;
+    fix16 dx, dy;
 
-    // stPlayerMovement(): wrap en los cuatro bordes con margen offSet.
+    Player_padDelta(pad, &dx, &dy);
+    p->e.x += dx;
+    p->e.y += dy;
+
+    // playerMovement.move, BOUNDARIES: wrap en los bordes exactos.
     Entity_wrapPlayfield(&p->e, PLAYER_WRAP_OFFSET);
 }
 

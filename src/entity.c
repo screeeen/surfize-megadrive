@@ -148,9 +148,10 @@ s32 Entity_distSq(fix16 ax, fix16 ay, fix16 bx, fix16 by)
 // el estado siguiente en el MISMO step, y compara el tiempo con igualdad
 // exacta ("if (state_time = 300)"). Esto reproduce las dos cosas.
 // ===========================================================================
-void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s16 boxOY, s16 boxW, s16 boxH)
+bool Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s16 boxOY, s16 boxW, s16 boxH)
 {
     u16 guard = 3;      // como mucho tres transiciones en el mismo frame
+    bool snapped = FALSE;
 
     while (guard--)
     {
@@ -165,7 +166,7 @@ void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s
             }
 
             e->stateTime++;
-            return;
+            return snapped;
         }
 
         if (e->state == ENT_ATTACK)
@@ -182,7 +183,7 @@ void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s
             }
 
             e->stateTime++;
-            return;
+            return snapped;
         }
 
         // stWalkingA1W: va hacia un agujero girando 2 grados por frame.
@@ -204,6 +205,7 @@ void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s
             {
                 e->x = Hole_x(0);
                 e->y = Hole_y(0);
+                snapped = TRUE;
             }
 
             if (e->stateTime == ST_WANDER_TIME)
@@ -214,7 +216,9 @@ void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s
             }
 
             e->stateTime++;
-            return;
+            return snapped;
         }
     }
+
+    return snapped;
 }

@@ -6,17 +6,18 @@
 #include "entity.h"
 
 // ===========================================================================
-// Jugador (oPlayer)
+// Jugador (oPlayer del GML, playerMovement de MonsterLite)
 //
-// Movimiento directo sin inercia: acc = 6 px/frame sumado por eje mientras
-// se pulsa la dirección, sin aceleración ni fricción, y con wrap toroidal en
-// los cuatro bordes con margen offSet = 15 (stPlayerMovement). En diagonal el
-// original no normaliza: suma acc a los dos ejes, así que se mueve un 41% más
-// rápido en diagonal. Portado tal cual.
+// Bloque 2 de MonsterLite: movimiento directo sin inercia a 4 px/f
+// (speed 0.2 u por tick de FixedUpdate), normalizado en diagonal por
+// decisión del usuario (Q7); wrap toroidal en los bordes exactos, sin margen;
+// nace en (160, 17), la posición de MonsterLite respecto al hexágono de
+// agujeros, que va centrado (Q6); choca con un círculo de 3,6 px. Ver
+// ML_PLAYER_* en arena.h.
 //
 // La posición es el ORIGEN del sprite, igual que en GameMaker, no la esquina
-// superior izquierda: el dibujado resta el origen y la colisión usa la bbox
-// de la máscara (ver PLAYER_BOX_* en arena.h).
+// superior izquierda: el dibujado resta el origen. La colisión es el círculo
+// alrededor de ese punto (ver Coll_circleBox).
 // ===========================================================================
 
 // La celda mide 24x24 con el origen del sprite en su centro: la rotación del
@@ -35,10 +36,15 @@ typedef struct
 
 void Player_init(Player *p);
 
-// Lee el pad y mueve el jugador. El original lee flechas o joystick con zona
-// muerta de 0.3 (oControles/Step_1); el pad de Mega Drive es digital, así que
-// el D-Pad equivale a las cuatro teclas.
+// Lee el pad y mueve el jugador. MonsterLite lee las flechas del teclado
+// (InputHelper, rama UNITY_EDITOR || UNITY_ANDROID); el D-Pad equivale a las
+// cuatro teclas.
 void Player_update(Player *p, u16 pad);
+
+// Lo que se desplaza la nave este frame con el pad dado, por eje: 4 px/f en
+// horizontal o vertical y 181/64 px/f por eje en diagonal. Lo usa también el
+// pivote del GML, que se mueve con el mismo input que la nave.
+void Player_padDelta(u16 pad, fix16 *dx, fix16 *dy);
 
 // direction = point_direction(x, y, target.x, target.y): el apuntado es
 // instantáneo, no gradual (el giro gradual es cosa de los enemigos).

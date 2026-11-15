@@ -186,12 +186,13 @@ void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py)
     liveRebuild();
 }
 
-bool Enemy_collides(s16 px, s16 py, s16 pw, s16 ph)
+bool Enemy_collides(s16 cx, s16 cy)
 {
     u16 n;
 
     for (n = 0; n < liveCount; n++)
-        if (Coll_overlap(px, py, pw, ph, liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H))
+        if (Coll_circleBox(cx, cy, ML_PLAYER_R2, ML_PLAYER_REACH,
+                           liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H))
             return TRUE;
 
     return FALSE;

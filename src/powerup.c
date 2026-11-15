@@ -163,7 +163,7 @@ void Pow_generate(fix16 x, fix16 y)
     spawn(POW_PACK, x, y);
 }
 
-bool Pow_collect(s16 px, s16 py, s16 pw, s16 ph, u8 weaponIndex, PowerPickup *out)
+bool Pow_collect(s16 cx, s16 cy, u8 weaponIndex, PowerPickup *out)
 {
     // oPlayer/Collision_oPaquete: la munición depende del arma en curso.
     static const u16 ammo[7] = { AMMO_WBLOCK, AMMO_LASER, AMMO_3WAY, AMMO_PIVOT,
@@ -174,9 +174,9 @@ bool Pow_collect(s16 px, s16 py, s16 pw, s16 ph, u8 weaponIndex, PowerPickup *ou
     {
         if (!pows[i].alive) continue;
 
-        if (!Coll_overlap(px, py, pw, ph,
-                          pows[i].x + PACK_BOX_OX, pows[i].y + PACK_BOX_OY,
-                          PACK_BOX_W, PACK_BOX_H))
+        if (!Coll_circleBox(cx, cy, ML_PLAYER_R2, ML_PLAYER_REACH,
+                            pows[i].x + PACK_BOX_OX, pows[i].y + PACK_BOX_OY,
+                            PACK_BOX_W, PACK_BOX_H))
             continue;
 
         out->type = pows[i].type;

@@ -87,6 +87,11 @@ void GfxDebug_input(u16 pad)
     if (pressed & BUTTON_C) { planeAOff = !planeAOff; setPal(PAL2, planeAOff); }
 }
 
+bool GfxDebug_panelOpen(void)
+{
+    return mode != 0;
+}
+
 // Recorre la tabla que acaba de montar Spr_flush, que es la que va al VDP.
 static void analyse(void)
 {

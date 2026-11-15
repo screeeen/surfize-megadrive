@@ -93,7 +93,11 @@ void Entity_wrapPlayfield(Entity *e, s16 margin);
 // hasPlayer a FALSE reproduce el "else" del original, que persigue un oTri
 // (power-up satélite) si no hay jugador: oTri es FASE 7, así que de momento
 // sin jugador el enemigo sólo sigue girando hacia su último rumbo.
-void Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s16 boxOY, s16 boxW, s16 boxH);
+//
+// Devuelve TRUE si en este frame ha llevado la entidad al agujero 0 (el
+// teletransporte de stWalkingA1W): la posición da un salto que no es avance,
+// y el gusano lo necesita saber para su caja envolvente (ver src/snake.c).
+bool Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s16 boxOY, s16 boxW, s16 boxH);
 
 // Índice del frame pre-rotado que corresponde al rumbo actual: 0 = derecha y
 // de ahí en sentido horario cada 45 grados, que es como tools/gm2md.py

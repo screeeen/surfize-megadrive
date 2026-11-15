@@ -71,6 +71,7 @@ static u16  shownKills;
 static u16  shownTop;
 static u16  blinkTimer;
 static bool nextOn;         // NEXT encendido en el parpadeo
+static u16  shownCredits = 0xFFFF;   // CREDITS ya escrito en pantalla
 static s16  bandTop = -1;   // filas del plano B que ha pisado la banda
 static s16  bandBottom = -1;
 
@@ -87,24 +88,14 @@ static void clearArea(void)
 }
 
 // Escribe 'text' en la fila 'row' del plano A sobre lo que haya de agujeros:
-// las celdas sin letra se quedan con el agujero, no con un hueco. Una sola
-// escritura de fila, así que no hay frame en que la fila salga a medias.
+// las celdas sin letra se quedan con el agujero, no con un hueco, y las
+// letras que caen encima de un agujero se componen con él (ver
+// Hole_textRow): con el hexágono, la fila de CREDITS cruza la parte de abajo
+// de tres agujeros. Una sola escritura de fila, así que no hay frame en que
+// la fila salga a medias.
 static void drawRowOverHoles(const char *text, u16 col, u16 row)
 {
-    u16 buf[COLS];
-    const u16 attr = TILE_ATTR(VDP_getTextPalette(), VDP_getTextPriority(), FALSE, FALSE);
-
-    Hole_rowTiles(row, buf, COLS);
-
-    while (*text && (col < COLS))
-    {
-        const char c = *text++;
-
-        if (c != ' ') buf[col] = attr | (TILE_FONT_INDEX + (u8)(c - 32));
-        col++;
-    }
-
-    VDP_setTileMapDataRow(BG_A, buf, row, 0, COLS, CPU);
+    Hole_drawTextRow(text, col, row);
 }
 
 // La marquesina va en la fila 29 del plano A, encima del fondo, y se mueve
@@ -176,6 +167,12 @@ void Menu_enter(void)
     // menu(): el récord se guarda al entrar (oMenu/Create_0)
     if (g_maxKills <= g_kills) g_maxKills = g_kills;
 
+    // Lo que esté pulsado al entrar no cuenta como pulsación nueva (el GML
+    // usa keyboard_check_pressed). Sin esto, el B que se mantiene en partida
+    // para que corra el tiempo (Q8) gastaba un crédito en el primer frame del
+    // menú y la partida volvía a empezar sin pasar por el interludio.
+    prevPad = JOY_readJoypad(JOY_1);
+
     barHeight = 0;
     typeTimer = MENU_TYPE_DELAY;
     typeLen = 1;
@@ -189,6 +186,10 @@ void Menu_enter(void)
     shownTypeLen = 0xFFFF;
     countKills = countTop = 0;
     shownKills = shownTop = 0xFFFF;
+    // Menu_leave borró la fila de CREDITS, y sus letras compuestas comparten
+    // tiles con el aviso HOLD B de la partida (ver Hole_textRow): se vuelve
+    // a escribir siempre al entrar.
+    shownCredits = 0xFFFF;
     blinkTimer = 0;
     nextOn = TRUE;
     clearArea();
@@ -386,6 +387,20 @@ static void drawWeapons(void)
 #define LOGO_CX      GML_POS(832)
 #define LOGO_CY      GML_POS(608)
 
+// El logo va en el plano A, en las celdas 17-23 x 11-17, y con el hexágono
+// de agujeros centrado (bloque 2 de MonsterLite) 40 de sus 49 celdas caen
+// sobre dibujo de algún agujero. Una celda sólo tiene un tile: con el del
+// logo tal cual, donde el logo es transparente se veía el plano B y los seis
+// agujeros salían cortados en rectángulo. En el original son sprites, que se
+// componen píxel a píxel.
+//
+// Así que cada celda del logo con agujero debajo se compone (agujeros debajo,
+// logo encima: comparten PAL2) y se sube ENCIMA del propio tile del logo: el
+// logo sólo se ve en el splash, sus tiles no los usa nadie más y no hace
+// falta ni un tile de VRAM nuevo (no queda VRAM sobrante, ver
+// VTile_allocSpare). Se compone siempre desde el logo de la ROM, así que
+// pintarlo otra vez da lo mismo. La celda entera pasa a prioridad alta, la
+// parte de agujero incluida: en el splash no hay sprites encima.
 static void drawLogo(void)
 {
     u16 tx, ty;
@@ -395,11 +410,34 @@ static void drawLogo(void)
     if (staticDrawn) return;
     staticDrawn = TRUE;
 
-    for (ty = 0; ty < 7; ty++)
-        for (tx = 0; tx < 7; tx++)
+    for (ty = 0; ty < LOGO_TILES; ty++)
+    {
+        for (tx = 0; tx < LOGO_TILES; tx++)
+        {
+            const u16 t = (ty * LOGO_TILES) + tx;
+            u32 cell[8];
+
+            if (Hole_cellPixels(col + tx, row + ty, cell))
+            {
+                const u32 *logo = logoTiles.tiles + (t * 8);
+                u16 w;
+
+                for (w = 0; w < 8; w++)
+                {
+                    const u32 v = logo[w];
+                    u32 m = (v | (v >> 1) | (v >> 2) | (v >> 3)) & 0x11111111;
+
+                    m *= 0xF;
+                    cell[w] = (cell[w] & ~m) | v;
+                }
+                VDP_loadTileData(cell, logoTileBase + t, 1, CPU);
+            }
+
             VDP_setTileMapXY(BG_A,
-                             TILE_ATTR_FULL(PAL2, TRUE, FALSE, FALSE, logoTileBase + (ty * 7) + tx),
+                             TILE_ATTR_FULL(PAL2, TRUE, FALSE, FALSE, logoTileBase + t),
                              col + tx, row + ty);
+        }
+    }
 }
 
 // Un paso de la cuenta: de uno en uno, salvo que el valor no quepa en
@@ -549,8 +587,6 @@ bool Menu_update(u16 pad, bool firstTime)
     }
 
     {
-        static u16 shownCredits = 0xFFFF;
-
         if (g_credits != shownCredits)
         {
             shownCredits = g_credits;

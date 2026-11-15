@@ -76,9 +76,9 @@
 // Constantes de jugabilidad, todas leídas del GML
 // ---------------------------------------------------------------------------
 
-// oPlayer/Create_0 + Step_0
-#define PLAYER_ACC          GML_SPEED(6)        // acc = 6        -> 1.44 px/f
-#define PLAYER_WRAP_OFFSET  GML_LEN(15)         // offSet = 15    -> 3 px
+// oPlayer/Create_0 + Step_0. La velocidad (acc = 6 -> 1,44 px/f) y el margen
+// del wrap (offSet = 15 -> 3 px) del GML ya no se usan: son los de
+// MonsterLite, ver "Jugador de MonsterLite" más abajo.
 #define SHOOT_INT_DEFAULT   GML_FRAMES(12)      // controlTime 12 -> 10 f
 #define SHOOT_INT_WEAPON    GML_FRAMES(6)       // controlTime 6  -> 5 f
 #define SHOOT_INT_3WAY      GML_FRAMES(12)      // 3WAY           -> 10 f
@@ -218,6 +218,65 @@
 #define ML_SPIDER_MAX_MU    1000
 #define ML_SNAKE_MAX_MU     4000
 
+// ---------------------------------------------------------------------------
+// Jugador de MonsterLite (bloque 2 de docs/MONSTERLITE_GAP.md)
+// ---------------------------------------------------------------------------
+
+// playerMovement.move (S/playerMovement.cs:35-65), rama de teclas: speed =
+// 0.2 u por tick de FixedUpdate [prefab player] en cada eje pulsado, sin
+// inercia. 0.2 u x 20 px = 4 px/f, exacto en fix16. El original suma los dos
+// ejes sin normalizar (5,66 px/f en diagonal); por decisión del usuario (Q7)
+// el port normaliza: en diagonal cada eje va a 4 / sqrt(2) = 2,8284 px/f,
+// que en fix16 son 181/64 = 2,8281 (velocidad total 3,9996 px/f, -0,01 %).
+// Constantes, sin raíces en ejecución.
+#define ML_PLAYER_SPEED       FIX16(4)
+#define ML_PLAYER_SPEED_DIAG  FIX16R(4.0 * 0.70710678118654752)
+
+// playerMovement.move, "BOUNDARIES" (S/playerMovement.cs:129-146): wrap
+// toroidal en los bordes exactos de la cámara (globales.minX/maxX/minY/maxY,
+// la mitad de la vista a cada lado), sin margen.
+#define PLAYER_WRAP_OFFSET    0
+
+// SphereCollider del prefab player [prefab]: radio 0.18 u, escala 1 ->
+// 3,6 px. Las distancias de colisión son enteras (píxeles), así que la
+// condición "d < 3,6" es "d^2 < 12,96", o sea d^2 <= 12 en enteros: exacta,
+// sin redondeo (no hay ningún d^2 entero entre 12 y 12,96).
+#define ML_PLAYER_RADIUS_X10  36                // 3,6 px
+#define ML_PLAYER_R2          (((ML_PLAYER_RADIUS_X10 * ML_PLAYER_RADIUS_X10) - 1) / 100)  // 12
+#define ML_PLAYER_REACH       ((ML_PLAYER_RADIUS_X10 + 9) / 10)                         // 4: ceil(3,6)
+
+// AgujerosPadre [prefab]: seis agujeros hijos en posiciones locales de 1 o
+// 2 u, en hexágono (ver src/hole.c). Por decisión del usuario (Q6) el
+// hexágono va CENTRADO en pantalla, no 2,57 u por debajo del centro como en
+// el dispositivo apaisado (posH, S/gameControl.cs:167-169).
+#define ML_HOLES_CX           (PLAYFIELD_W / 2)  // 160
+#define ML_HOLES_CY           (PLAYFIELD_H / 2)  // 120
+#define ML_UNIT_PX            20                 // 1 u de mundo
+
+// La nave nace en highPos = ScreenToWorldPoint(W / 2, H / 1.4)
+// (S/gameControl.cs:156) y el hexágono está en posH = (W / 2, H - H / 1.4):
+// en apaisado la nave queda (2 / 1.4 - 1) x 12 u = 5,14 u = 102,9 px por
+// ENCIMA del centro del hexágono. Q6: la misma posición respecto al
+// hexágono, con el hexágono centrado -> (160, 120 - 102,9) = (160, 17).
+#define ML_PLAYER_SPAWN_ABOVE ((s16)((((2.0 / 1.4) - 1.0) * PLAYFIELD_H) + 0.5))   // 103
+#define ML_PLAYER_SPAWN_X     ML_HOLES_CX
+#define ML_PLAYER_SPAWN_Y     (ML_HOLES_CY - ML_PLAYER_SPAWN_ABOVE)                // 17
+
+// El tiempo sólo corre con B pulsado (Q8). En MonsterLite, en partida:
+//   if (Input.touchCount == 0 && HUD.counter >= 60) Time.timeScale = 0;
+//   if (Input.touchCount > 0) Time.timeScale = 1;
+// (S/gameControl.cs:265-301). Sin dedo en pantalla, el tiempo se para; el
+// port cambia el dedo por mantener B (ver src/game.c, timeStopped).
+#define ML_TIME_BUTTON        BUTTON_B
+// HUD.counter vuelve a 0 fuera de partida y sube una vez por llamada a
+// OnGUI mientras sale "ARENA!", hasta 60 (S/HUD.cs:163-166, 470-472):
+// mientras tanto no se congela. Unity llama a OnGUI al menos dos veces por
+// frame (eventos Layout y Repaint), así que son 30 frames de 60 Hz -> 25 f.
+// Con eventos de toque hay más llamadas por frame y dura menos. DEDUCIDO del
+// funcionamiento de Unity, no medido: con una sola llamada por frame serían
+// 50 f (ver docs/MONSTERLITE_GAP.md §2.4).
+#define ML_FREEZE_GRACE_F     25
+
 // Umbrales de desbloqueo por kills de récord (oWeaponBox/Create_0 +
 // stCheckWeapon). NO son los del .yyp de surfize_changes (1/2/3/4, valores de
 // prueba): son los de neu_swarm2_40.gmx, del surfize.rar del autor, elegidos
@@ -255,7 +314,10 @@
 // generoso en las esquinas de la caja. Documentado en docs/PORT_AUDIT_GML.md.
 // ---------------------------------------------------------------------------
 
-// sprite173 (nave): 38x58, origen (19,19), bbox L1 R37 T0 B55
+// sprite173 (nave): 38x58, origen (19,19), bbox L1 R37 T0 B55. Desde el
+// bloque 2 de MonsterLite la nave del jugador choca con su círculo de 3,6 px
+// (ML_PLAYER_R2); esta caja sólo la usa ya la nave réplica del GML (oTri, en
+// src/projectile.c), que tiene el mismo arte.
 #define PLAYER_BOX_OX   GML_LEN(1 - 19)         // -4
 #define PLAYER_BOX_OY   GML_LEN(0 - 19)         // -4
 #define PLAYER_BOX_W    GML_LEN(37 - 1)         // 7

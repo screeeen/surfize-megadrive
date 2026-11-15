@@ -24,7 +24,7 @@ u16 profFrames;
 #include "resources.h"
 #include "effect.h"
 
-// Los topes del port: 8 arañas, 3 gusanos de tipo 1 y 1 de tipo 2 (52
+// Los topes del port: 8 arañas, 2 gusanos de tipo 1 y 1 de tipo 2 (34
 // eslabones), 14 proyectiles y los paquetes que quepan. Es el caso peor que
 // el juego puede poner en pantalla.
 void Bench_fillArena(void)
@@ -91,8 +91,8 @@ void Bench_run(void)
 
     // Las de colisión se miden sin acierto: es el recorrido completo, que es
     // justo el caso peor.
-    BENCH(BENCH_ENEMY_COLLIDES, sink += Enemy_collides(-200, -200, 7, 11));
-    BENCH(BENCH_SNAKE_COLLIDES, sink += Snake_collides(-200, -200, 7, 11));
+    BENCH(BENCH_ENEMY_COLLIDES, sink += Enemy_collides(-200, -200));
+    BENCH(BENCH_SNAKE_COLLIDES, sink += Snake_collides(-200, -200));
 
     // El barrido que hace Proj_update por cada bala viva: 14 balas contra
     // arañas y cabezas.
@@ -119,7 +119,7 @@ void Bench_run(void)
 
     BENCH(BENCH_POW_COLLECT, {
         PowerPickup got;
-        sink += Pow_collect(-200, -200, 7, 11, 0, &got);
+        sink += Pow_collect(-200, -200, 0, &got);
     });
 
     // Colocar y cambiar de frame, que es lo que hacen los dos bucles grandes.

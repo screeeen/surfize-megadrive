@@ -7,9 +7,11 @@
 // Arnés de medición (FASE 10). Inerte salvo que se compile con los flags
 // puestos a 1; no entra en la ROM que se distribuye.
 //
-//   PORT_STRESS  llena la arena al arrancar (8 arañas + los 4 gusanos) y hace
-//                al jugador inmortal, para leer el caso peor en el contador
-//                de CPU de pantalla. Con PORT_STRESS_MORTAL además el
+//   PORT_STRESS  llena la arena al arrancar (8 arañas + los 3 gusanos del
+//                pool), hace que las oleadas la rellenen hasta el pool (sin el
+//                tope de gusanos de MonsterLite por nivel, ver mlSnakeCap en
+//                src/game.c) y hace al jugador inmortal: es el caso peor que
+//                mide tools/measure.sh. Con PORT_STRESS_MORTAL además el
 //                jugador puede morir y nace una nave réplica: sirve para ver
 //                qué sobrevive a la muerte (paquetes y réplicas).
 //

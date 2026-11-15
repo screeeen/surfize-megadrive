@@ -95,8 +95,9 @@ bool Snake_hitPoint(s16 x, s16 y, bool *killed, bool *body);
 fix16 Snake_lastKillX(void);
 fix16 Snake_lastKillY(void);
 
-// Colisión contra cabeza o cualquier seguidor.
-bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph);
+// Colisión de la nave (círculo de MonsterLite de centro (cx, cy) y radio
+// 3,6 px, ML_PLAYER_R2) contra la cabeza o cualquier eslabón.
+bool Snake_collides(s16 cx, s16 cy);
 
 u16 Snake_countType(u8 type);
 

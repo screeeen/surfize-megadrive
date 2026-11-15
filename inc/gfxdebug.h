@@ -23,13 +23,19 @@
 //   - la cola de DMA por encima de su capacidad por frame: subidas que se
 //     salen del vblank o se pierden.
 //
-// Controles, en partida (los botones están libres porque el disparo es
-// automático):
+// Controles, en partida (el disparo es automático y A y C no hacen nada en
+// partida; B es el botón que hace correr el tiempo, Q8 del bloque 2 de
+// MonsterLite):
 //
 //   START  panel: apagado -> números -> números + gráfica por filas
 //   A      sprites encendidos / apagados
 //   B      plano B (el fondo) encendido / apagado
 //   C      plano A (agujeros y HUD) encendido / apagado
+//
+// A, B y C sólo valen con el panel abierto. Con el panel abierto el tiempo
+// de la partida NO se para al soltar B (decisión del usuario), así que B
+// queda para el depurador; con el panel cerrado, B vuelve a ser el del
+// tiempo.
 //
 // Los planos se "apagan" poniendo su línea de paleta al color de fondo (el
 // VDP no tiene un interruptor por plano): el fondo usa PAL3 y los agujeros y
@@ -58,9 +64,14 @@
 void GfxDebug_input(u16 pad);
 // Después de Spr_flush y antes del vblank.
 void GfxDebug_frame(void);
+// TRUE con el panel abierto. Decisión del usuario (bloque 2): con el panel
+// abierto el tiempo de la partida NO se congela al soltar B, y B sigue
+// siendo del depurador (plano B). Ver timeStopped en src/game.c.
+bool GfxDebug_panelOpen(void);
 #else
 #define GfxDebug_input(pad)   ((void)0)
 #define GfxDebug_frame()      ((void)0)
+#define GfxDebug_panelOpen()  (FALSE)
 #endif
 
 #endif

@@ -25,3 +25,11 @@ Respuestas a las preguntas abiertas de `docs/MONSTERLITE_GAP.md` §6. Mandan sob
 | Q19 | Tutorial | **Solo una pantalla de instrucciones** la primera vez, sin la línea "AVOID THE HOLES". |
 | Q20 | Sacudida grande | **Solo desplazamiento, al tamaño original** (±80/±60 px), sin zoom. |
 | Q21 | Música | **Se convierten las 5 pistas `.xm`** de MonsterLite. |
+
+## Decisiones añadidas durante el bloque 2 (2026-11-15)
+
+| Tema | Decisión |
+|---|---|
+| Q8: botón B y el depurador de gráficos (`GFXDEBUG=1`) | **Con el panel del depurador abierto, el tiempo no se congela** y B sigue siendo del depurador. La ROM normal no cambia. |
+| Aparición de la nave | **(160, 17)**, como en el original: 103 px por encima del centro del hexágono. Que quede bajo el HUD provisional se acepta hasta el bloque 9. |
+| Orientación inicial de la nave | **Hacia arriba**, como ahora (desviación deliberada respecto a MonsterLite, que mira a la derecha). |

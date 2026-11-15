@@ -42,8 +42,11 @@ void Pow_updateAll(void);
 // checkMorte(), con la posición de la cabeza que acaba de morir.
 void Pow_generate(fix16 x, fix16 y);
 
-// Recoge lo que toque la caja del jugador. TRUE si ha cogido algo.
-bool Pow_collect(s16 px, s16 py, s16 pw, s16 ph, u8 weaponIndex, PowerPickup *out);
+// Recoge lo que toque la nave: en MonsterLite todo lo que recoge el jugador
+// lo toca su esfera de 3,6 px (OnTriggerEnter del prefab player), así que es
+// el círculo de centro (cx, cy) contra la caja del objeto. TRUE si ha cogido
+// algo.
+bool Pow_collect(s16 cx, s16 cy, u8 weaponIndex, PowerPickup *out);
 
 u16 Pow_count(u8 type);
 

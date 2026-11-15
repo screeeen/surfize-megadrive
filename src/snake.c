@@ -44,6 +44,12 @@ typedef struct
     // barrido de 12 sólo corre cuando algo cae dentro de verdad.
     s16    bbX0, bbY0, bbX1, bbY1;
     u8     bbTick;
+    // El salto al agujero 0 (ver SNAKE_BB_MARGIN): frames desde que la
+    // cabeza saltó (jumpSpan = ninguno en el cuerpo), cuántos tarda el salto
+    // en llegar al último eslabón, y si el frame anterior también saltó.
+    u8     jumpAge;
+    u8     jumpSpan;
+    u8     snapped;
     MDSpr *headSprite;
     MDSpr *segSprite[SNAKE_MAX_FOLLOWERS];
     // La cabeza gira a 32 direcciones con los frames en ROM, subidos por DMA
@@ -69,11 +75,29 @@ typedef struct
 // Recalcularla cada frame son cuatro comparaciones por eslabón (unos 3800
 // ciclos con la arena llena), así que se recalcula cada 4 frames y se infla
 // con lo más que puede moverse el gusano en ese tiempo, redondeado hacia
-// arriba. Sigue sin dejarse fuera ningún contacto.
+// arriba.
 //
 // Con la velocidad del GML eran 1,875 px/f x 4 -> 8. Con la de MonsterLite
 // por nivel (bloque 1) el máximo es el del nivel 9: f = 9.8 u/s -> 3,92 px/f
 // (251/64 en fix16), x 4 = 15,7 -> 16.
+//
+// El margen sólo cubre el AVANCE. La cabeza también puede SALTAR: en
+// stWalkingA1W, al tocar un agujero, la IA la lleva al agujero 0 (ver
+// Entity_updateAI): desde otro agujero, a 30 px o más de donde estaba, y al
+// llegar al propio agujero 0, hasta unos 12. Con la caja de hasta 3
+// frames antes, la cabeza y luego cada eslabón que pasa por el salto
+// quedaban fuera de la caja: hasta 3 frames sin chocar con la nave ni con las
+// balas, y la nave sin poder apuntarles (lo midió el verificador del bloque
+// 1: partes a 48 px fuera). Por eso, desde el frame del salto y hasta que el
+// salto ha recorrido el cuerpo entero (eslabones x stepdelay: 72 y 50
+// frames), la caja se recalcula CADA frame, exacta.
+//
+// Sólo cuenta el PRIMER salto de una racha. Mientras vaga encima del agujero
+// 0, la cabeza lo sigue tocando y la IA la vuelve a poner en el centro cada
+// frame, pero esos saltos son de menos de un avance (todas esas posiciones
+// caben en +-4 px del agujero), y el margen los cubre: recalcular cada frame
+// durante toda la racha, que dura lo que le queda del estado de vagar (hasta
+// 500 frames), sería pagar las 4 comparaciones por eslabón sin necesidad.
 #define SNAKE_BB_EVERY  4
 #define SNAKE_BB_MARGIN 16
 
@@ -125,6 +149,12 @@ void Snake_initAll(void)
         s->type = slotType(i);
         s->followers = parts - 1;
         s->stepDelay = (s->type == SNAKE_TYPE_1) ? SNAKE1_STEPDELAY : SNAKE2_STEPDELAY;
+        // El eslabón n va n*stepdelay - 1 entradas por detrás de la cabeza
+        // (ver cacheParts): el último pasa por el salto a los
+        // followers*stepdelay - 1 frames.
+        s->jumpSpan = (u8)(s->followers * s->stepDelay);
+        s->jumpAge = s->jumpSpan;
+        s->snapped = FALSE;
 
         {
             const bool t1 = (s->type == SNAKE_TYPE_1);
@@ -266,6 +296,8 @@ bool Snake_spawn(u8 type)
         }
         s->histPos = 0;
         s->bbTick = 0;
+        s->jumpAge = s->jumpSpan;
+        s->snapped = FALSE;
         cacheParts(s);
 
         hideSprites(s);
@@ -298,8 +330,16 @@ void Snake_updateAll(bool hasPlayer, fix16 px, fix16 py)
         const bool shown = Entity_tickAppear(&s->e);
 
         PROF_START(PROF_S_AI);
-        Entity_updateAI(&s->e, hasPlayer, px, py,
-                        SNAKE_HEAD_BOX_OX, SNAKE_HEAD_BOX_OY, SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H);
+        {
+            const bool snap = Entity_updateAI(&s->e, hasPlayer, px, py,
+                                              SNAKE_HEAD_BOX_OX, SNAKE_HEAD_BOX_OY,
+                                              SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H);
+
+            // El salto al agujero 0 abre la ventana de caja exacta (ver
+            // SNAKE_BB_MARGIN); los siguientes de la misma racha, no.
+            if (snap && !s->snapped) s->jumpAge = 0;
+            s->snapped = snap;
+        }
         Entity_advance(&s->e);
         PROF_STOP(PROF_S_AI);
 
@@ -308,6 +348,11 @@ void Snake_updateAll(bool hasPlayer, fix16 px, fix16 py)
         s->histX[s->histPos] = F2I(s->e.x);
         s->histY[s->histPos] = F2I(s->e.y);
         s->histPos = (s->histPos + 1) & SNAKE_HIST_MASK;
+        if (s->jumpAge < s->jumpSpan)
+        {
+            s->bbTick = 0;
+            s->jumpAge++;
+        }
         cacheParts(s);
         PROF_STOP(PROF_S_CACHE);
 
@@ -620,7 +665,7 @@ bool Snake_damageNoKill(s16 x, s16 y, s16 w, s16 h, s16 dmg)
     return FALSE;
 }
 
-bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph)
+bool Snake_collides(s16 cx, s16 cy)
 {
     u16 i, n;
 
@@ -630,19 +675,22 @@ bool Snake_collides(s16 px, s16 py, s16 pw, s16 ph)
 
         if (!s->e.active || !s->e.visible) continue;
 
-        if (Coll_overlap(px, py, pw, ph,
-                         s->headIX + SNAKE_HEAD_BOX_OX,
-                         s->headIY + SNAKE_HEAD_BOX_OY,
-                         SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H))
+        if (Coll_circleBox(cx, cy, ML_PLAYER_R2, ML_PLAYER_REACH,
+                           s->headIX + SNAKE_HEAD_BOX_OX,
+                           s->headIY + SNAKE_HEAD_BOX_OY,
+                           SNAKE_HEAD_BOX_W, SNAKE_HEAD_BOX_H))
             return TRUE;
 
-        if (!nearSnake(s, px, py, pw, ph)) continue;
+        // El descarte por la caja del gusano, con el cuadrado que envuelve
+        // el círculo: si no la toca, ningún eslabón puede tocar el círculo.
+        if (!nearSnake(s, cx - ML_PLAYER_REACH, cy - ML_PLAYER_REACH,
+                       2 * ML_PLAYER_REACH, 2 * ML_PLAYER_REACH)) continue;
 
         for (n = 0; n < s->followers; n++)
-            if (Coll_overlap(px, py, pw, ph,
-                             s->partIX[n] + SNAKE_BODY_BOX_OX,
-                             s->partIY[n] + SNAKE_BODY_BOX_OY,
-                             SNAKE_BODY_BOX_W, SNAKE_BODY_BOX_H))
+            if (Coll_circleBox(cx, cy, ML_PLAYER_R2, ML_PLAYER_REACH,
+                               s->partIX[n] + SNAKE_BODY_BOX_OX,
+                               s->partIY[n] + SNAKE_BODY_BOX_OY,
+                               SNAKE_BODY_BOX_W, SNAKE_BODY_BOX_H))
                 return TRUE;
     }
 

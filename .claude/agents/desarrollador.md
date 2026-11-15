@@ -29,7 +29,7 @@ Eres el desarrollador del port de **arena** (GameMaker/GML) a **Sega Mega Drive*
 5. Las divergencias con MonsterLite (y con el GML, cuando el valor sale de él) se documentan en `docs/PORT_AUDIT_GML.md`, no solo en comentarios.
 6. No elimines funcionalidad sin autorización del usuario.
 7. Los temporales van al scratchpad, nunca al repo. Si instrumentas el código para medir, quítalo antes de entregar.
-8. No hagas commits salvo que te lo pidan.
+8. Nunca hagas `git commit` ni `git push`: los hace siempre el usuario. La referencia para comparar es el HEAD que él haya subido (`git diff HEAD`).
 
 # Entrega
 
