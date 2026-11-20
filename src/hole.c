@@ -22,57 +22,37 @@ static u8  holeTimer[HOLE_COUNT];
 #define HOLE_ART_CENTER 32      // el origen del sprite está en el centro del bloque
 
 // ---------------------------------------------------------------------------
-// El hexágono de MonsterLite (bloque 2, Q6)
+// El anillo de agujeros del port
 //
-// AgujerosPadre.prefab: seis hijos "Agujero" (escala 1.1 cada uno, la del
-// padre es 1) en posiciones locales de unidades de mundo, en el orden de
-// m_Children del padre: (-2, 1), (0, -2), (0, 2), (2, -1), (-2, -1), (2, 1).
-// Una unidad son 20 px y la Y de Unity va hacia arriba, así que en pantalla
-// son (-40, -20), (0, +40), (0, -40), (+40, +20), (-40, +20), (+40, -20)
-// desde el centro del hexágono, que va en el centro de la pantalla.
+// rooms/_1/_1.yy: las instancias de oAgujerSuper del room de 1600x1200. La
+// primera es la reconstruida; las otras cinco, en el orden del room. Ver la
+// nota de inc/hole.h.
 //
-// MonsterLite elige el agujero al azar (FindGameObjectsWithTag), así que el
-// orden no le importa; aquí sí, mientras dure la IA del GML (bloque 8): el 0
-// es al que salta el enemigo que vaga y los del medio son los destinos de
-// vagar (ver inc/hole.h). Las arañas nacen en uno al azar, como en MonsterLite
-// (Hole_spiderSpawn). Se toma el orden del prefab.
+// En el bloque 2 se cambiaron por el hexágono de MonsterLite centrado (Q6);
+// el usuario decidió al cerrar el bloque 2 volver a este anillo
+// (docs/MONSTERLITE_DECISIONES.md). Divergencia deliberada de MonsterLite.
+//
+// MonsterLite elige el agujero al azar, así que el orden no le importa, y
+// desde el bloque 8 al port tampoco (la IA del GML saltaba al 0 y vagaba
+// hacia los del medio).
 // ---------------------------------------------------------------------------
-#define HOLE_X0 (ML_HOLES_CX - (2 * ML_UNIT_PX))
-#define HOLE_Y0 (ML_HOLES_CY - ML_UNIT_PX)
-#define HOLE_X1 (ML_HOLES_CX)
-#define HOLE_Y1 (ML_HOLES_CY + (2 * ML_UNIT_PX))
-#define HOLE_X2 (ML_HOLES_CX)
-#define HOLE_Y2 (ML_HOLES_CY - (2 * ML_UNIT_PX))
-#define HOLE_X3 (ML_HOLES_CX + (2 * ML_UNIT_PX))
-#define HOLE_Y3 (ML_HOLES_CY + ML_UNIT_PX)
-#define HOLE_X4 (ML_HOLES_CX - (2 * ML_UNIT_PX))
-#define HOLE_Y4 (ML_HOLES_CY + ML_UNIT_PX)
-#define HOLE_X5 (ML_HOLES_CX + (2 * ML_UNIT_PX))
-#define HOLE_Y5 (ML_HOLES_CY - ML_UNIT_PX)
+static const s16 holeX[HOLE_COUNT] = { GML_POS(558), GML_POS(820), GML_POS(558), GML_POS(832), GML_POS(1088), GML_POS(1094) };
+static const s16 holeY[HOLE_COUNT] = { GML_POS(754), GML_POS(272), GML_POS(446), GML_POS(888), GML_POS(424),  GML_POS(736)  };
 
-static const s16 holeX[HOLE_COUNT] = { HOLE_X0, HOLE_X1, HOLE_X2, HOLE_X3, HOLE_X4, HOLE_X5 };
-static const s16 holeY[HOLE_COUNT] = { HOLE_Y0, HOLE_Y1, HOLE_Y2, HOLE_Y3, HOLE_Y4, HOLE_Y5 };
-
-// Dónde se pinta cada bloque, en celdas del plano. El plano A sólo se mueve
-// de 8 en 8 píxeles, así que el dibujo cae en la rejilla: en X los tres
-// valores (120, 160, 200) son exactos, pero en Y los cuatro agujeros de los
-// lados (100 y 140) caen a 4 px de una fila. Se redondean HACIA FUERA del
-// centro del hexágono (se pintan a 96 y 144), que deja el hexágono simétrico
-// y es lo que menos lo deforma: hacia dentro los dos agujeros de cada lado
-// se montaban 19 px (mirado en una maqueta). La posición lógica (spawn, IA,
-// colisión) es la exacta.
-#define HOLE_COL_OF(x)  (((x) - HOLE_ART_CENTER + 4) >> 3)
-#define HOLE_ROW_OF(y)  (((y) < ML_HOLES_CY) ? (((y) - HOLE_ART_CENTER) >> 3) \
-                                             : (((y) - HOLE_ART_CENTER + 7) >> 3))
+// Dónde se pinta cada bloque, en celdas del plano: el plano A sólo se mueve
+// de 8 en 8 píxeles, así que el dibujo cae en la celda más cercana (hasta
+// 4 px respecto al original). La posición lógica (spawn, IA, colisión) es la
+// exacta.
+#define HOLE_CELL_OF(v)  (((v) - HOLE_ART_CENTER + 4) / 8)
 static const s16 holeCol[HOLE_COUNT] =
 {
-    HOLE_COL_OF(HOLE_X0), HOLE_COL_OF(HOLE_X1), HOLE_COL_OF(HOLE_X2),
-    HOLE_COL_OF(HOLE_X3), HOLE_COL_OF(HOLE_X4), HOLE_COL_OF(HOLE_X5)
+    HOLE_CELL_OF(GML_POS(558)), HOLE_CELL_OF(GML_POS(820)),  HOLE_CELL_OF(GML_POS(558)),
+    HOLE_CELL_OF(GML_POS(832)), HOLE_CELL_OF(GML_POS(1088)), HOLE_CELL_OF(GML_POS(1094))
 };
 static const s16 holeRow[HOLE_COUNT] =
 {
-    HOLE_ROW_OF(HOLE_Y0), HOLE_ROW_OF(HOLE_Y1), HOLE_ROW_OF(HOLE_Y2),
-    HOLE_ROW_OF(HOLE_Y3), HOLE_ROW_OF(HOLE_Y4), HOLE_ROW_OF(HOLE_Y5)
+    HOLE_CELL_OF(GML_POS(754)), HOLE_CELL_OF(GML_POS(272)), HOLE_CELL_OF(GML_POS(446)),
+    HOLE_CELL_OF(GML_POS(888)), HOLE_CELL_OF(GML_POS(424)), HOLE_CELL_OF(GML_POS(736))
 };
 
 // ---------------------------------------------------------------------------
@@ -105,22 +85,58 @@ static bool tileUsed(const TileSet *ts, u16 t)
     return FALSE;
 }
 
-// Sube las celdas con dibujo de 'ts', seguidas, desde 'base'. Las tiras de
-// celdas seguidas van en una sola transferencia.
+// ---------------------------------------------------------------------------
+// Agujeros en verde (petición del autor, 2026-11-16; invención estética)
+//
+// Los agujeros comparten PAL2 con el logo, el HUD y los iconos de arma, y
+// usan sus índices 1 (negro), 2 (gris muy oscuro) y 3 (gris oscuro, 2
+// píxeles). Cambiar esos colores teñiría también el resto. Así que al
+// cargarlos esos píxeles pasan a los índices 14 y 15, que no usaba nadie
+// (gm2md.py los deja a 0x0000), y ahí van los verdes. El reborde rojo
+// (índices 4 y 5) no se toca.
+// ---------------------------------------------------------------------------
+#define HOLE_IDX_FILL  14
+#define HOLE_IDX_RIM   15
+#define HOLE_COL_FILL  0x0020   // relleno: verde muy oscuro (antes negro)
+#define HOLE_COL_RIM   0x0042   // borde: verde oscuro (antes gris 0x222/0x444)
+
+static u16 holePal[16];
+
+// Copia un tile del agujero pasando los índices 1, 2 y 3 a los verdes.
+static void greenTile(const u32 *src, u32 *dst)
+{
+    u16 w, k;
+
+    for (w = 0; w < 8; w++)
+    {
+        u32 v = src[w], out = 0;
+
+        for (k = 0; k < 32; k += 4)
+        {
+            u32 n = (v >> k) & 0xF;
+
+            if (n == 1) n = HOLE_IDX_FILL;
+            else if ((n == 2) || (n == 3)) n = HOLE_IDX_RIM;
+            out |= n << k;
+        }
+        dst[w] = out;
+    }
+}
+
+// Sube las celdas con dibujo de 'ts', ya en verde, desde 'base'. Sólo al
+// arrancar.
 static void loadCells(const TileSet *ts, u16 base)
 {
-    u16 t = 0;
+    u16 t;
 
-    while (t < HOLE_CELLS)
+    for (t = 0; t < HOLE_CELLS; t++)
     {
-        u16 n = 0;
+        u32 buf[8];
 
-        if (holeCell[t] == HOLE_EMPTY) { t++; continue; }
+        if (holeCell[t] == HOLE_EMPTY) continue;
 
-        while (((t + n) < HOLE_CELLS) && (holeCell[t + n] != HOLE_EMPTY)) n++;
-
-        VDP_loadTileData(ts->tiles + (t * 8), base + holeCell[t], n, DMA);
-        t += n;
+        greenTile(ts->tiles + (t * 8), buf);
+        VDP_loadTileData(buf, base + holeCell[t], 1, CPU);
     }
 }
 
@@ -154,8 +170,8 @@ static u16 cellAttr(u16 i, u16 t)
 // Aquí se hace lo mismo a mano: para cada celda con dibujo de dos o más
 // agujeros hay un tile propio en VRAM con los agujeros que la tocan
 // compuestos uno encima de otro, en el orden de la tabla (el que va después,
-// encima). Se recompone cuando cambia el reborde rojo de alguno. Con el
-// hexágono son 30 celdas, nunca con más de dos agujeros.
+// encima). Se recompone cuando cambia el reborde rojo de alguno. Nunca más
+// de MAX_SHARED (findShared las cuenta al arrancar).
 // ---------------------------------------------------------------------------
 #define MAX_SHARED 48
 
@@ -205,7 +221,12 @@ bool Hole_cellPixels(s16 col, s16 row, u32 *buf)
 
         if ((t == HOLE_EMPTY) || (holeCell[t] == HOLE_EMPTY)) continue;
 
-        overlay(buf, (holeActive[i] ? &holeRedTiles : &holeTiles)->tiles + (t * 8));
+        {
+            u32 g[8];
+
+            greenTile((holeActive[i] ? &holeRedTiles : &holeTiles)->tiles + (t * 8), g);
+            overlay(buf, g);
+        }
         any = TRUE;
     }
 
@@ -227,9 +248,8 @@ static u16 composeShared(u16 k)
 // Una letra de la fuente del sistema escrita en el plano A ocupa la celda
 // entera: donde la letra no tiene píxel se ve el plano B (el fondo), no el
 // agujero que había en esa celda, y el agujero sale cortado en rectángulos.
-// Con el hexágono en el centro de la pantalla les pasa a la fila de
-// CREDITS del menú y al aviso "HOLD B" de la partida (y les pasará a los
-// mensajes del bloque 9).
+// Le puede pasar a la fila de CREDITS del menú, al aviso "HOLD A/B/C" de la
+// partida y a los mensajes del bloque 9.
 //
 // Las letras que caen sobre dibujo de agujero se componen en un tile propio:
 // los agujeros debajo y la letra encima, en blanco de la paleta de los
@@ -238,7 +258,7 @@ static u16 composeShared(u16 k)
 // ROM va comprimida.
 //
 // HOLE_TEXT_TILES tiles, compartidos: sólo hay un texto así en pantalla a la
-// vez (CREDITS en el menú, HOLD B en partida). Si un texto pide más, las
+// vez (CREDITS en el menú, HOLD A/B/C en partida). Si un texto pide más, las
 // letras que sobran salen con el tile de la fuente, como antes.
 // ---------------------------------------------------------------------------
 #define HOLE_TEXT_TILES 10
@@ -353,7 +373,10 @@ void Hole_initGraphics(void)
 {
     u16 t;
 
-    PAL_setPalette(PAL2, holePalette, DMA);
+    memcpy(holePal, holePalette, sizeof(holePal));
+    holePal[HOLE_IDX_FILL] = HOLE_COL_FILL;
+    holePal[HOLE_IDX_RIM]  = HOLE_COL_RIM;
+    PAL_setPalette(PAL2, holePal, CPU);
 
     holeLoaded = 0;
     for (t = 0; t < HOLE_CELLS; t++)
@@ -485,6 +508,22 @@ void Hole_draw(void)
     for (i = 0; i < HOLE_COUNT; i++) drawOne(i);
 }
 
+s32 Hole_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s)
+{
+    s32 best = -1;
+    u16 i;
+
+    for (i = 0; i < HOLE_COUNT; i++)
+    {
+        const s32 d = Coll_rayCircle(holeX[i] - ox, holeY[i] - oy, c, s,
+                                     ML_X10_TO_F16(ML_RAY_R_HOLE_X10));
+
+        if ((d >= 0) && ((best < 0) || (d < best))) best = d;
+    }
+
+    return best;
+}
+
 fix16 Hole_x(u16 i)
 {
     return FIX16(holeX[i % HOLE_COUNT]);
@@ -511,24 +550,3 @@ u16 Hole_spiderSpawn(void)
     return random() % HOLE_COUNT;
 }
 
-u16 Hole_wanderTarget(void)
-{
-    // stWalkingA1W: trunc((N-1) - random(N-2)), o sea de 1 a N-2. Ni el
-    // primero ni el último entran.
-    return 1 + (random() % (HOLE_COUNT - 2));
-}
-
-bool Hole_touching(s16 x, s16 y, s16 w, s16 h)
-{
-    u16 i;
-
-    for (i = 0; i < HOLE_COUNT; i++)
-    {
-        if (Coll_overlap(x, y, w, h,
-                         holeX[i] + HOLE_BOX_OX, holeY[i] + HOLE_BOX_OY,
-                         HOLE_BOX_W, HOLE_BOX_H))
-            return TRUE;
-    }
-
-    return FALSE;
-}

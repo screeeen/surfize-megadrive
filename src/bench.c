@@ -37,15 +37,21 @@ void Bench_fillArena(void)
 
     // Unos cuantos paquetes por el suelo, como tras varias muertes.
     for (i = 0; i < 8; i++)
-        Pow_generate(FIX16(40 + (i * 30)), FIX16(60 + ((i & 3) * 40)));
+        Pow_drop(FIX16(40 + (i * 30)), FIX16(60 + ((i & 3) * 40)), TRUE);
 
 #ifdef PORT_TEST_BOMB
     // El blancazo de la bomba sin tener que ir a por el paquete.
     Effect_bombFlash();
 #endif
 #ifdef PORT_STRESS_MORTAL
-    // Una réplica, para comprobar que sobrevive a la muerte del jugador.
-    Proj_spawnTri(FIX16(250), FIX16(200));
+    // Una nave holo activa, para comprobar que sobrevive a la muerte.
+    Proj_spawnHolo(FIX16(250), FIX16(200), TRUE);
+#endif
+#ifdef PORT_STRESS_HOLO
+    // Bloque 7: las 10 naves holo de MonsterLite, activas, disparando y con
+    // su línea a la nave.
+    for (i = 0; i < ML_HOLO_MAX; i++)
+        Proj_spawnHolo(FIX16(40 + ((i % 5) * 60)), FIX16(((i < 5) ? 50 : 190)), TRUE);
 #endif
 }
 
@@ -62,8 +68,8 @@ static void settle(void)
 {
     u16 k;
 
-    // Los enemigos nacen con la alarma de aparición: hay que dejarles pasar
-    // los 75 frames del original para medirlos ya visibles y moviéndose.
+    // Desde el bloque 8 los enemigos nacen visibles y en marcha; se les deja
+    // correr un rato para que se repartan por la pantalla antes de medir.
     for (k = 0; k < 120; k++)
     {
         Enemy_updateAll(TRUE, FIX16(160), FIX16(120));
@@ -137,14 +143,10 @@ void Bench_run(void)
     {
         Entity probe;
 
-        Entity_spawnHidden(&probe, FIX16(100), FIX16(100), FIX16(1), FIX16(2), 4);
-        probe.visible = TRUE;
-        probe.speed = FIX16(1);
+        Entity_spawnML(&probe, FIX16(100), FIX16(100), FIX16(1), ML_SNAKE_TURN_K_MAX, 4);
         probe.state = ENT_ATTACK;
 
-        BENCH(BENCH_ENTITY_AI, Entity_updateAI(&probe, TRUE, FIX16(160), FIX16(120), 0, 0, 7, 11));
-        probe.state = ENT_ATTACK;
-        probe.stateTime = 0;
+        BENCH(BENCH_ENTITY_AI, Entity_moveML(&probe, TRUE, FIX16(160), FIX16(120)));
         BENCH(BENCH_ENTITY_ADVANCE, Entity_advance(&probe));
     }
 

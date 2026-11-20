@@ -43,6 +43,9 @@ void Bg_setCover(s16 top, s16 bottom);
 void Bg_select(u16 index);
 u16  Bg_current(void);
 
+// La paleta del fondo puesto (el fogonazo rojo del game over vuelve a ella).
+const u16 *Bg_palette(void);
+
 // Una vez por frame, haya partida o menú.
 void Bg_update(void);
 

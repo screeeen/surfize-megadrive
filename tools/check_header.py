@@ -30,6 +30,17 @@ def main():
     if rom_end != size - 1:
         print(f"  ERROR: rom_end no cuadra con el tamano del ROM")
         bad = True
+    sram_type = int.from_bytes(data[0x1B2:0x1B4], "big")
+    sram_start = int.from_bytes(data[0x1B4:0x1B8], "big")
+    sram_end = int.from_bytes(data[0x1B8:0x1BC], "big")
+    print(f"  sram      tipo 0x{sram_type:04X}  0x{sram_start:06X}-0x{sram_end:06X}")
+    # Bloque 6: el guardado (inc/save.h) usa 8 KB en los bytes impares.
+    if sram != "RA" or sram_type != 0xF820 or sram_start != 0x200001 or sram_end < 0x200001 + 2 * 128:
+        print("  ERROR: la SRAM de la cabecera no es la que usa inc/save.h")
+        bad = True
+    if size > sram_start - 1:
+        print("  ERROR: el ROM se solapa con la SRAM")
+        bad = True
     if "SAMPLE" in title or "DEMONSTRATION" in title:
         print("  ERROR: la cabecera sigue siendo la plantilla de SGDK")
         bad = True

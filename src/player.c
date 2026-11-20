@@ -2,12 +2,11 @@
 
 void Player_init(Player *p)
 {
-    // startGame() de MonsterLite: Instantiate(player, highPos, ...), que con
-    // el hexágono de agujeros centrado (Q6) cae en (160, 17): ver
-    // ML_PLAYER_SPAWN_* en arena.h.
+    // En el centro de la pantalla, como startGame() del GML (decisión del
+    // usuario al cerrar el bloque 2): ver PLAYER_SPAWN_* en arena.h.
     Entity_clear(&p->e);
-    p->e.x = FIX16(ML_PLAYER_SPAWN_X);
-    p->e.y = FIX16(ML_PLAYER_SPAWN_Y);
+    p->e.x = FIX16(PLAYER_SPAWN_X);
+    p->e.y = FIX16(PLAYER_SPAWN_Y);
     // La nave empieza mirando ARRIBA. Es una desviación del GML a propósito:
     // allí oPlayer/Create_0 no toca direction, así que se queda en el 0 por
     // defecto de GameMaker, que es mirando a la derecha.
@@ -18,26 +17,20 @@ void Player_init(Player *p)
     p->e.active = TRUE;
     p->e.visible = TRUE;
     p->facing = 0;
-    p->controlTime = SHOOT_INT_FIRST;
+    // shootTime = 4 [prefab player] (S/disparo.cs). El GML esperaba 25 f.
+    p->controlTime = ML_SHOT_FIRST_F;
 }
 
 void Player_padDelta(u16 pad, fix16 *dx, fix16 *dy)
 {
-    // playerMovement.move: cada flecha suma speed a su eje. Izquierda y
-    // derecha a la vez se anulan, igual que allí.
-    s16 sx = 0, sy = 0;
-    fix16 v;
-
-    if (pad & BUTTON_LEFT)  sx--;
-    if (pad & BUTTON_RIGHT) sx++;
-    if (pad & BUTTON_UP)    sy--;
-    if (pad & BUTTON_DOWN)  sy++;
-
-    // Q7: la misma velocidad en las ocho direcciones.
-    v = (sx && sy) ? ML_PLAYER_SPEED_DIAG : ML_PLAYER_SPEED;
-
-    *dx = (sx < 0) ? -v : ((sx > 0) ? v : 0);
-    *dy = (sy < 0) ? -v : ((sy > 0) ? v : 0);
+    // oPlayer/Step_0: if global.kleft {x -= acc} ... un eje por tecla, sin
+    // normalizar la diagonal. Izquierda y derecha a la vez se anulan.
+    *dx = 0;
+    *dy = 0;
+    if (pad & BUTTON_LEFT)  *dx -= PLAYER_ACC;
+    if (pad & BUTTON_RIGHT) *dx += PLAYER_ACC;
+    if (pad & BUTTON_UP)    *dy -= PLAYER_ACC;
+    if (pad & BUTTON_DOWN)  *dy += PLAYER_ACC;
 }
 
 void Player_update(Player *p, u16 pad)
@@ -48,23 +41,13 @@ void Player_update(Player *p, u16 pad)
     p->e.x += dx;
     p->e.y += dy;
 
-    // playerMovement.move, BOUNDARIES: wrap en los bordes exactos.
+    // stPlayerMovement(): wrap en los cuatro bordes con margen offSet.
     Entity_wrapPlayfield(&p->e, PLAYER_WRAP_OFFSET);
 }
 
 void Player_aim(Player *p, fix16 tx, fix16 ty)
 {
     p->e.angle = Entity_angleTo(&p->e, tx, ty);
-}
-
-bool Player_tickFire(Player *p)
-{
-    // oPlayer/Step_0: "controlTime -= 1; if controlTime < 1 { ... }"
-    p->controlTime--;
-
-    if (p->controlTime >= 1) return FALSE;
-
-    return TRUE;
 }
 
 u8 Player_facing(const Player *p)

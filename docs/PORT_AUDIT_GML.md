@@ -2240,13 +2240,13 @@ Desde el 2026-11-15 la fuente de verdad es **MonsterLite** (Unity, C#); el GML p
 | Bloque | Estado |
 |---|---|
 | 1. Estructura de partida (puntuación `u32`, niveles, oleadas por tiempo) | ✅ hecho (2026-11-15) |
-| 2. Jugador | ✅ hecho (2026-11-15), Q8 incluida tras la decisión del usuario sobre el depurador |
-| 3. Armas y munición | ⏳ pendiente (Q9-Q12) |
-| 4. Economía en partida | ⏳ pendiente (Q11) |
-| 5. Pantallas | ⏳ pendiente (Q13-Q16) |
-| 6. Guardado en SRAM | ⏳ pendiente |
-| 7. Power-ups | ⏳ pendiente (Q17) |
-| 8. Enemigos (IA, gusano) | ⏳ pendiente |
+| 2. Jugador | ✅ hecho (2026-11-15), Q8 incluida tras la decisión del usuario sobre el depurador; agujeros, aparición y movimiento revertidos al port el 2026-11-16 |
+| 3. Armas y munición | ✅ hecho (2026-11-16); la compra queda para los bloques 4-5 (hasta entonces las cinco armas de MonsterLite están disponibles) |
+| 4. Economía en partida | ✅ hecho (2026-11-16) |
+| 5. Pantallas | ✅ hecho (2026-11-16), con el logo de Screen Implosion convertido de MonsterLite |
+| 6. Guardado en SRAM | ✅ hecho (2026-11-16) |
+| 7. Power-ups | ✅ hecho (2026-11-17) |
+| 8. Enemigos (IA, gusano) | ✅ hecho (2026-11-20), con las migas de 8 px por decisión del usuario, los dos arreglos de la verificación y la holo inactiva que muere al contacto (decisión del usuario) |
 | 9. HUD, mensajes y fondo por nivel | ⏳ pendiente (Q16) |
 | 10. Logros | ⏳ pendiente (Q18) |
 | 11. Tutorial | ⏳ pendiente (Q19) |
@@ -2298,8 +2298,8 @@ Un cuarto gusano además **no cabe en VRAM**: arranca con `VRAM: 1436 de 1425 ti
 | Las oleadas de power-ups (3, 4, 6, 16, 19-21) no crean nada todavía | Son del bloque 7 | De momento la bomba, los rayos y las réplicas siguen saliendo por `generaPaquete()` del GML al morir cada cabeza |
 | La oleada 27 no enseña "!!!" | Es del bloque 9 | — |
 | La metralla del GML (`oDestro`) también puntúa `level` | No existe en MonsterLite; con la regla de Q5 toda baja suma `level` | — |
-| La nave aparece en el centro del GML, no en (160, 69) | Es del bloque 2 (Q6) | Resuelto en el bloque 2: nace en (160, 17), ver abajo |
-| Giro, IA, aparición de 75 f y hp siguen siendo del GML | Son del bloque 8 | El enemigo va a la velocidad de MonsterLite pero gira como en el GML. Los eslabones del gusano siguen separados por `stepdelay` frames, así que a la velocidad del nivel 9 (hasta 3,92 px/f) quedan más separados que antes (hasta ~24 px); las migas de MonsterLite, cada 8 px, son del bloque 8 |
+| La nave aparece en el centro del GML, no en (160, 69) | Es del bloque 2 (Q6) | Resuelto en el bloque 2: nace en (160, 17), ver abajo. Revertido el 2026-11-16: vuelve al centro, (160, 120) |
+| Giro, IA, aparición de 75 f y hp siguen siendo del GML | Son del bloque 8 | El enemigo va a la velocidad de MonsterLite pero gira como en el GML. Los eslabones del gusano siguen separados por `stepdelay` frames, así que a la velocidad del nivel 9 (hasta 3,92 px/f) quedan más separados que antes (hasta ~24 px); las migas de MonsterLite, cada 8 px, son del bloque 8 **Resuelto en el bloque 8** (IA, giro, aparición inmediata y migas cada 8 px; el hp de MonsterLite ya venía del bloque 3). |
 | HUD provisional: cifras grandes sin la palabra SCORE en grande, y "LV / UP / LAST / SCORE" con la fuente del sistema | La fuente grande no tiene C ni R; el HUD definitivo es el bloque 9 (Q16) | Se lee mal sobre los fondos con mucho detalle, igual que el LAST de antes. LAST pasa a ser la mejor puntuación de la sesión |
 | La cuenta de bajas (`g_kills`) sigue existiendo aparte de la puntuación | La usan el desbloqueo por récord de las armas del GML (40/60/80/100), que según Q9 **convive** con la tienda de MonsterLite y se queda, y el interludio KILLS/TOP hasta el bloque 5 | El interludio y el número volador de la cabeza enseñan bajas, no puntuación |
 
@@ -2405,7 +2405,7 @@ La música baja de tono 0,1 por frame. El aviso es la textura `dedo` más "KEEP 
   - la sacudida.
 
   Las colisiones tampoco se comprueban (con la física parada, en Unity no salta ningún trigger).
-- **Lo de `Update` que no se para en MonsterLite todavía no existe en el port**: caducidad de paquetes y monedas (bloque 4), LASER y MOIRE de impacto instantáneo y bolas CIRCULAR (bloque 3), rayos (bloque 7) e IA de `enemyMov` (bloque 8). Cada uno de esos bloques tiene que sacar lo suyo del corte de `playUpdate`. Está escrito en el comentario de `timeStopped`.
+- **Lo de `Update` que no se para en MonsterLite todavía no existe en el port**: caducidad de paquetes y monedas (bloque 4), LASER y MOIRE de impacto instantáneo y bolas CIRCULAR (bloque 3), rayos (bloque 7) e IA de `enemyMov` (bloque 8). Cada uno de esos bloques tiene que sacar lo suyo del corte de `playUpdate`. Está escrito en el comentario de `timeStopped`. **Bloque 8**: el temporizador de `enemyMov` ya sigue con el tiempo parado (`Enemy_tickFrozen`, `Snake_tickFrozen`).
 - **La nave no se agranda al congelar.** En MonsterLite, cada frame congelado reproduce `landingAnim` (`gameControl.cs:270`). Como el `Animator` de `player.prefab` va en modo Normal (`m_UpdateMode` 0), la nave se queda a escala ×4 (4,00 × 3,82) mientras el tiempo está parado, y al reanudar vuelve a ×1 en 0,23 s. El VDP no escala sprites: queda pendiente para el bloque 12 (efectos), con frames pre-escalados o descartado. **Divergencia**.
 - **La sacudida** de MonsterLite seguiría, pero la del port es todavía la del GML (`stShake`, que vive en el Step de `oPlayer`) y se para con la nave. El desplazamiento se aplica al colocar cada sprite (`inc/spr.h`), así que mover el plano con los sprites quietos los descuadraría. La sacudida de MonsterLite es del bloque 12.
 - **El aviso**: "HOLD B" con la fuente del sistema, centrado, en la fila 20 del plano A (160 px; MonsterLite empieza en 157). Va compuesto encima del agujero de abajo (ver arriba). La mano (`dedo`) no tiene equivalente con el pad y no se porta. La música de partida no existe todavía (bloque 12), así que tampoco hay cambio de tono.
@@ -2416,25 +2416,360 @@ La música baja de tono 0,1 por frame. El aviso es la textura `dedo` más "KEEP 
 
 | Qué | Por qué | Consecuencia en juego |
 |---|---|---|
-| En diagonal, 4 px/f en vez de 5,66 | Decisión del usuario (Q7). **Divergencia deliberada** | La diagonal es un 29 % más lenta que en MonsterLite; las ocho direcciones van igual |
-| Hexágono centrado, no 51 px por debajo del centro | Decisión del usuario (Q6) | Todo queda 51 px más arriba que en el dispositivo apaisado |
-| La nave nace en (160, 17), debajo del HUD provisional | Consecuencia de Q6: 102,9 px por encima del centro del hexágono. Confirmado y aceptado por el usuario hasta el bloque 9 | Al empezar, la nave queda tapada en parte por "LAST" (fila 2) y la cifra de BULLETS: blanco sobre blanco, sólo se distingue la sombra. En cuanto se mueve se ve |
-| Los cuatro agujeros de los lados se pintan 4 px más lejos del centro | Rejilla de 8 px del plano A | Sólo visual: nacimiento, IA y colisión usan la posición exacta |
-| Círculo de la nave contra las **cajas** de los enemigos del GML | Las esferas de los enemigos (8,4 y 9,6 px) son del bloque 8 | El contacto llega a 3 px del borde de la caja en recto, por los cuatro lados, y a 2 + 2 en diagonal. Desde arriba la caja vieja de 7×11 ya mataba a 6 px: ahora se puede pasar más cerca por arriba. Los 12 px entre centros de MonsterLite (araña) llegan con el bloque 8 |
+| En diagonal, 4 px/f en vez de 5,66 | Decisión del usuario (Q7). **Divergencia deliberada**. **Revertido el 2026-11-16**: movimiento del GML, ver "Movimiento del GML y fondo verde" | La diagonal es un 29 % más lenta que en MonsterLite; las ocho direcciones van igual |
+| Hexágono centrado, no 51 px por debajo del centro | Decisión del usuario (Q6) **Revertido el 2026-11-16**, ver "Reversión de agujeros y aparición". | Todo queda 51 px más arriba que en el dispositivo apaisado |
+| La nave nace en (160, 17), debajo del HUD provisional | Consecuencia de Q6: 102,9 px por encima del centro del hexágono. Confirmado y aceptado por el usuario hasta el bloque 9 **Revertido el 2026-11-16**, ver "Reversión de agujeros y aparición". | Al empezar, la nave queda tapada en parte por "LAST" (fila 2) y la cifra de BULLETS: blanco sobre blanco, sólo se distingue la sombra. En cuanto se mueve se ve |
+| Los cuatro agujeros de los lados se pintan 4 px más lejos del centro | Rejilla de 8 px del plano A **Revertido el 2026-11-16**, ver "Reversión de agujeros y aparición". | Sólo visual: nacimiento, IA y colisión usan la posición exacta |
+| Círculo de la nave contra las **cajas** de los enemigos del GML | Las esferas de los enemigos (8,4 y 9,6 px) son del bloque 8 | El contacto llega a 3 px del borde de la caja en recto, por los cuatro lados, y a 2 + 2 en diagonal. Desde arriba la caja vieja de 7×11 ya mataba a 6 px: ahora se puede pasar más cerca por arriba. Los 12 px entre centros de MonsterLite (araña) llegan con el bloque 8 **Resuelto en el bloque 8**: esfera de 3,6 px contra las de 8,4 y 9,6 px (12 y 13,2 px entre centros). |
 | La recogida usa el círculo contra la caja de paquete del GML (11×11) | La caja de 20×20 de MonsterLite es del bloque 4 | Hay que pasar más cerca que en MonsterLite, y que antes con la caja de 7×11 |
-| El orden de los agujeros es el de `m_Children` del prefab | MonsterLite no depende del orden; la IA del GML sí (bloque 8) | El enemigo que vaga salta a (120, 100), el agujero 0. Las arañas ya no dependen del orden: nacen en uno al azar, como en MonsterLite (resuelto en esta entrega) |
+| El orden de los agujeros es el de `m_Children` del prefab | MonsterLite no depende del orden; la IA del GML sí (bloque 8) **Revertido el 2026-11-16**, ver "Reversión de agujeros y aparición". | El enemigo que vaga salta a (120, 100), el agujero 0. Las arañas ya no dependen del orden: nacen en uno al azar, como en MonsterLite (resuelto en esta entrega) **Bloque 8**: la IA del GML ya no existe, así que el orden de los agujeros ya no importa. |
 | La nave nace **mirando arriba**; en MonsterLite, a la derecha (`Quaternion.identity`) | Decisión del usuario (bloque 2). **Divergencia deliberada** | Sólo se ve los 50 f hasta que sale el primer gusano |
 | La congelación es con B y no con el dedo; aviso "HOLD B" sin la mano | Decisión del usuario (Q8): no hay pantalla táctil | Hay que mantener B pulsado para jugar |
 | La gracia antes de la primera congelación es de 25 f | Deducida (dos llamadas a `OnGUI` por frame), no medida: en MonsterLite depende de cuántas veces llame Unity a `OnGUI` | Entre 0 y 25 f de diferencia con el original al empezar |
 | Con el tiempo parado también se paran la sacudida (todavía la del GML) y las cosas del GML que aún no tienen su versión de MonsterLite | Ver arriba: lo de `Update` llegará con sus bloques | Nada cuenta mientras está parado: lo del suelo no caduca (tampoco caduca con el tiempo en marcha, bloque 4) |
 | Con el panel de `GFXDEBUG=1` abierto no se congela | Decisión del usuario | Sólo en la build de depuración |
 | El texto sobre los agujeros (CREDITS, HOLD B) va en blanco de la paleta de los agujeros y sus celdas enteras con prioridad alta | Una celda del plano sólo tiene un tile y una paleta | En esas celdas, un sprite que pase por encima del agujero queda debajo del dibujo del agujero mientras se ve el texto |
-| El sexto agujero reconstruido del GML (558, 754) ya no se usa | Lo sustituye el hexágono de MonsterLite | — |
+| El sexto agujero reconstruido del GML (558, 754) ya no se usa | Lo sustituye el hexágono de MonsterLite **Revertido el 2026-11-16**, ver "Reversión de agujeros y aparición". | — |
+
+### Reversión de agujeros y aparición (2026-11-16)
+
+Decisión del usuario al cerrar el bloque 2 (`docs/MONSTERLITE_DECISIONES.md`), que **sustituye a Q6** y a la aparición en (160, 17): los agujeros y la aparición de la nave vuelven a como estaban en `4628c56`, antes del bloque 2. El resto del bloque 2 se queda: velocidad, wrap, radio, congelación con B y arañas naciendo en un agujero al azar.
+
+- **Agujeros** (`src/hole.c`): otra vez el anillo del port, los cinco `oAgujerSuper` del room `_1` más el sexto reconstruido (558, 754), en el mismo orden que antes (el reconstruido primero), con `GML_POS`. Cada bloque se pinta en la celda más cercana, `(v − 32 + 4) / 8`, como antes del bloque 2 (hasta 4 px de diferencia).
+- **Aparición** (`PLAYER_SPAWN_X/Y` en `inc/arena.h`, `src/player.c`): en el centro de la pantalla, (160, 120), como `startGame()` del GML. Desaparecen `ML_HOLES_CX/CY`, `ML_UNIT_PX` y `ML_PLAYER_SPAWN_*`.
+- **Se conserva lo que el bloque 2 añadió a los agujeros sin depender del hexágono**: sólo se suben y se pintan las celdas con dibujo (43 por variante), una celda sólo se compone si tiene dibujo de dos agujeros, y el texto (CREDITS, HOLD B) y el logo se componen encima de los agujeros. Con el anillo hay **4 celdas compuestas** (30 con el hexágono, 33 con el algoritmo anterior al bloque 2), así que quedan más tiles libres.
+
+**Divergencias que introduce:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Agujeros en el anillo del port, no en el hexágono de MonsterLite | Decisión del usuario al cerrar el bloque 2. **Divergencia deliberada** | Otra disposición: anillo de ~58 px de radio alrededor del centro, frente al hexágono de 40-45 px |
+| El sexto agujero sigue siendo una reconstrucción, no sale del GML ni de MonsterLite | El room del GML sólo trae cinco (ver "El sexto agujero") | — |
+| La nave nace en el centro de la pantalla, no en `highPos` | Decisión del usuario. **Divergencia deliberada** | Empieza en medio del anillo y fuera del HUD |
+
+### Movimiento del GML y fondo verde (2026-11-16)
+
+Decisiones del usuario (`docs/MONSTERLITE_DECISIONES.md`, 2026-11-16):
+
+- **Movimiento de la nave como en el GML**, sustituyendo a Q7 y al wrap sin margen del bloque 2: `PLAYER_ACC = GML_SPEED(6)` = 92/64 = 1,4375 px/f por eje (1,44 en el original, −0,17 %), sin normalizar la diagonal (2,03 px/f en diagonal, un 41 % más), y `PLAYER_WRAP_OFFSET = GML_LEN(15)` = 3 px (`inc/arena.h`, `src/player.c`). El pivote del GML sigue usando `Player_padDelta`, así que va pegado a la nave. Desaparecen `ML_PLAYER_SPEED` y `ML_PLAYER_SPEED_DIAG`. El radio de 3,6 px del bloque 2 se queda.
+- **Fondo en verde oscuro y con menos brillo**: `src/bg.c` usa su propia paleta (`bgRuinsGreen`) en vez de la gris que genera `tools/bg2md.py`. Los mismos 8 tonos, en el mismo orden y todos distintos, de 0x000 a 0x282 (antes de 0x000 a 0xEEE). Regenerar el fondo con `bg2md.py` no la pisa. Es una **invención estética** pedida por el autor: no sale ni del GML ni de MonsterLite.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Nave a 1,44 px/f por eje (2,03 en diagonal), no a 4 px/f de MonsterLite | Decisión del usuario. **Divergencia deliberada** de MonsterLite; igual que el GML | La nave va a un 36 % de la velocidad de MonsterLite |
+| Wrap con margen de 3 px | Decisión del usuario; igual que el GML | Reaparece 3 px antes del borde |
+| Fondo verde oscuro | Petición del autor. **Invención** | Sólo visual |
+| Agujeros verdes: relleno 0x020 (antes negro) y borde 0x042 (antes grises 0x222/0x444); reborde rojo intacto | Petición del autor. **Invención** | Sólo visual. Como PAL2 la comparten el logo, el HUD y los iconos de arma, `src/hole.c` pasa los índices 1-3 de los agujeros a 14 y 15, que no usaba nadie (`greenTile`), y el resto no cambia de color |
+
+### Bloque 3: armas y munición (2026-11-16)
+
+Decisiones que aplica: Q9 tal como la matizó el usuario al cerrar el bloque 2 (una sola versión de WBLOCK, LASER y TWAY, con los valores de MonsterLite y por compra; PIVOT y PARA siguen del GML y por récord), Q10 (la munición se conserva hasta apagar), Q11 (iconos de CIRCULAR y MOIRE desde MonsterLite) y Q12 (cadencia propia de CIRCULAR, 3 bolas y WBLOCK hacia donde apunta; la de las monedas es del bloque 4).
+
+**Qué cambia:**
+
+- **Armas** (`inc/weapon.h`): WBLOCK, LASER, TWAY, PIVOT, PARA, CIRCULAR, MOIRE, en el orden del selector. Las de MonsterLite usan sus valores (`ML_SHOT_*`, `ML_BULLET_*`, `ML_LASER_*`, `ML_CIRC_*` en `inc/arena.h`); el arte sigue siendo el del GML (decisión 3): la bala del WBLOCK con el dibujo de `oWBlock` y la del TWAY con el de `o3way`. El GML LASER (segmentos de 7 f) y el 3WAY del GML desaparecen.
+- **Disparo** (`src/game.c`, `S/disparo.cs:32-160`): sólo cuenta y dispara si hay enemigo; `shootTime` empieza en 4 y baja 1 por frame; al llegar a 1 dispara el arma con munición (y gasta 1) o la bala fina sin ella. Cadencias 8 (fina) / 4 (WBLOCK) / 5 (LASER) / 3 (TWAY) / 2 (MOIRE) / 4 (CIRCULAR, Q12) f; PIVOT y PARA, 5 f del GML. Desaparecen el primer disparo a los 25 f y la bala fina extra del frame en que se acaba la munición (GML).
+- **Apuntado**: el objetivo es el de `getClosest` (`S/enemyController.cs:194`): arañas y **cabezas**, no eslabones. Con el del GML (eslabón más cercano) y balas que atraviesan eslabones, la bala fina hizo **0 bajas en 600 f**. Las ocultas en su agujero siguen contando, como antes.
+- **Balas** (fina y gorda): 12 px/f, caja de 16×16 centrada, mueren al salir de pantalla. **Atraviesan los eslabones.** Contra la cabeza, regla de MonsterLite: si `hp < 0` muere; si no, resta (fina 1, gorda 3). La gorda que no mata sigue y no vuelve a tocar esa cabeza (`OnTriggerEnter` sólo salta al entrar: máscara `ignore`). Con `hp` 4 (`ML_SNAKE_HP`, ahora en los dos gusanos; el GML daba 4 y 2) la fina mata al 6.º impacto y la gorda al 3.º. La araña muere de cualquier impacto. Cada impacto hace explosión, y cada baja, la metralla (petición del autor).
+- **LASER y MOIRE** (`S/RaycastScr.cs`): impacto instantáneo. Mientras viva el rayo (25 f el del LASER, 7 f el del MOIRE) se lanza cada frame desde la nave en su rumbo, sin distancia máxima, y mata al primer objeto de la línea si es araña o cabeza. Tapan: eslabones, agujeros (17,6 px), lo que hay en el suelo y las balas finas en vuelo (`Coll_rayCircle`, `*_rayFirst`). El haz visible son 16 puntos amarillos (`dot.png` del GML) cada 20 px hasta el borde, 2 f (LASER, quieto donde se disparó) o 7 f (MOIRE, sigue a la nave).
+- **CIRCULAR** (`S/circCont.cs`, `S/circularScr.cs`): 3 bolas a 20 px de la nave (0°, 120°, 240°). Con munición se sueltan y van a 24 px/f a la araña o cabeza visible más cercana a ellas; sin munición orbitan a 2,4°/f. Una suelta no vuelve a orbitar. Esfera de 4 px; resta 3 a la cabeza y muere en el impacto; la explosión sólo sale si queda menos de 2 enemigos.
+- **Munición por arma** (`g_ammo[]`): paquete de 10 / 4 / 10 / 4 / 3 (WBLOCK, LASER, TWAY, CIRCULAR, MOIRE) y 5 / 8 (PIVOT, PARA, GML). La del arma equipada vive en `g_playerBullets` durante la partida y vuelve a `g_ammo` al morir; no se reinicia al empezar (Q10).
+- **Selector del menú**: siete iconos; el cursor salta las armas que no se pueden elegir. PIVOT (récord > 80) y PARA (> 100) siguen el desbloqueo por récord; NEXT enseña el umbral del siguiente. Marquesinas nuevas: " CIRCLES " y " MOIRE " (nombres de la tienda). Voz sólo para las cinco del GML.
+- **Iconos** (`tools/ml_icons.py` → `res/sprite/weapons_ml.png`): el glifo blanco de `iconCirculo.png` e `iconMoire.png`, recortado y reducido a 18 px, dentro del marco de 32×32 de los iconos del GML y con sus grises. 32 tiles de VRAM normal (la sobrante está llena).
+- **Pool de proyectiles**: 14 → 36 (TWAY ≤ ~35 desde una esquina, §2.5). Medido con 24: el caso peor no mejora (388 frente a 384), así que no se recorta.
+
+**Divergencias que introduce:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| ~~Las cinco armas de MonsterLite están disponibles sin comprar~~ | Resuelto en el bloque 5: se compran en la tienda | — |
+| En el frame en que el rayo mata, la baja cuenta una vez | En el original todos los `RaycastObj` vivos golpean al mismo enemigo (Destroy diferido) y cada uno suma y suelta premio | Menos puntos y premios que el original con LASER y MOIRE en fuego sostenido |
+| El rayo se ordena por la proyección del centro de cada collider, no por el punto de entrada | Más barato; sólo cambia el orden de dos objetos casi solapados en la línea | — |
+| El haz son puntos amarillos, no una línea | El VDP no dibuja líneas; el segmento de láser del GML a escala 0,2 (1×6 px) no se veía | Línea de puntos cada 20 px |
+| Las bolas sólo persiguen enemigos visibles | Los enemigos que el port esconde 75 f en su agujero (GML, hasta el bloque 8) no se pueden tocar; las bolas se quedaban encima y llenaban el pool (caso peor 340/600) | Sin enemigo visible, la bola se destruye (como sin enemigos en MonsterLite) **Bloque 8**: los enemigos ya nacen visibles; las bolas persiguen a cualquiera (`Enemy_closest`). |
+| Las cajas de los enemigos siguen siendo las del GML; el rayo usa los radios de MonsterLite (8,4 / 9,6 / 17,6 px) | Las esferas de los enemigos son del bloque 8 | Una bala y el rayo pueden no coincidir en el borde de un enemigo **Resuelto en el bloque 8**: balas y rayo usan las mismas esferas. |
+| Desplazamiento del WBLOCK de 6 px (5,8) | `sprite.bounds.size.x / 2` del sprite de la NAVE (`disparo` está en ella): `nave.png`, 58 px a 100 px/u, leído con UnityPy el 2026-11-16 (la primera entrega usaba 12 px, deducidos de la bala) | Redondeo de 0,2 px |
+| Sin premio (moneda o paquete) por baja ni por bola contra araña; sigue el `generaPaquete()` del GML por cabeza | Los drops son del bloque 4 | — |
+| Sin hitstop de 30 ms por baja con bala, sin la sacudida pequeña de MonsterLite (siguen las del GML) y sin los sonidos de MonsterLite (siguen `laserSnd`, `shotSnd`, `wBlockSnd`, `threeWaySnd`) | Bloque 12 (Q17) | — |
+| La metralla del GML sigue restando 1 con la regla del GML (resta y luego mira) | Es del GML, a petición del autor | Un gusano tocado por la metralla muere con menos impactos de bala (medido: 3 o 5 con la fina) |
+| El tipo del paquete se decide al recogerlo, no al aparecer | El arma no se puede cambiar en partida | Ninguna |
+
+**Medición del caso peor** (`PORT_STRESS=1`, como `tools/measure.sh` pero forzando arma y munición por el depurador; vueltas de 600, más es mejor):
+
+| Arma | Vueltas | Bajas |
+|---|---|---|
+| Bala fina (sin munición) | 465 | 27 |
+| WBLOCK | 491 | 28 |
+| LASER | 491 | 28 |
+| TWAY | **384** | 24 |
+| CIRCULAR (antes de limitar las bolas a enemigos visibles: 340) | 516 | 27 |
+| MOIRE | 448 | 24 |
+
+Referencia: 533/15 con la bala del GML antes del bloque 3, pero con menos bajas no es la misma partida (las bajas traen explosiones y metralla). Con `PORT_PROF=2`, el TWAY gasta en proyectiles ~85 líneas por frame frente a ~39 de la fina: 36 balas comprobando 8 arañas y 3 cabezas cada una. Es el arma más cara; si hace falta, la palanca es el barrido de colisiones de las balas, no el tamaño del pool.
+
+### Bloque 4: economía en partida (2026-11-16)
+
+**Qué cambia:**
+
+- **Lo que suelta un enemigo** (`Pow_drop`, `leavePow` de MonsterLite): por cada baja con disparo, 50 % moneda y 50 % paquete, en la posición de la bala (o del enemigo, con el rayo). La bola CIRCULAR contra una araña suelta siempre paquete. **`generaPaquete()` del GML ya no se usa**: no salen paquetes por cabeza muerta ni los power-ups del GML (bomba, réplicas, rayos) hasta que lleguen con sus oleadas (bloque 7). Las muertes por metralla no sueltan nada.
+- **Paquete**: la munición es la del arma equipada **al aparecer** (`bulletType`), con los valores del bloque 3. Caduca a los 167 f (`lifeTime` 200 de Update). Al recogerlo da la munición en el acto, sube a 2,4 px/f y se acaba en pocos frames (la vida baja 31 por frame). Caja de 20×20 centrada. Ya no muere sobre un agujero (eso era del GML; los power-ups del GML lo conservan).
+- **Moneda** (`tools/ml_coin.py` → `res/sprite/coin.png`, Q11): `coinAnimation.png`, 6 frames reducidos a 13 px (12,8 en MonsterLite) en celdas de 16×16, con el tinte dorado del prefab (`m_Color` 0,937 / 0,788 / 0,302, leído con UnityPy) y la paleta de sprites del port; anima a 12 por segundo (`coinAnim`, un frame cada 4,17 f). Vale 50 o 60 hasta el nivel 10 y 50, 60, 150, 180 o 100 desde el 11, con el nivel de cuando aparece. Caduca a los 167 f. Al recogerla suma al saldo (`g_coins`) y a las de la partida (`g_coinsEarned`, a 0 al empezar) y vuela hacia una pantalla por debajo del centro de abajo a 3,2 px/f (sale de la pantalla y se acaba). Pool de 16.
+- **Q12**: la moneda que nace sobre un agujero u otra moneda se queda donde cae (en el original salía disparada 900 px y se perdía).
+- **Tiempo parado** (Q8): en MonsterLite la caducidad y la subida del paquete van en `Update` sin `deltaTime`, así que siguen con el tiempo parado; el vuelo de la moneda usa `deltaTime` y se para. Aquí igual (`Pow_tickFrozen`). Con el menú puesto también caducan.
+- **El rayo** de LASER y MOIRE choca también con las monedas.
+- **HUD**: `COINS <saldo>` en la última fila, desde el centro, con la fuente del sistema (provisional hasta el bloque 9).
+
+**Divergencias que introduce:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Las armas del GML (PIVOT, PARA) y las balas de las réplicas también sueltan moneda o paquete | Sin `generaPaquete()` no tendrían de dónde sacar munición | — |
+| La metralla no suelta nada | No es un disparo de MonsterLite | Algunas bajas sin premio (8 de 119 en 3000 f con WBLOCK) |
+| La moneda no crece al recogerla (×1,1 por frame hasta ×2) | El VDP no escala sprites | — |
+| COINS en blanco y en la fila 29 | Fuente del sistema; en MonsterLite va en amarillo | No se ve en NTSC (224 líneas) |
+| Sin `Thread.Sleep` ni sonidos de MonsterLite al recoger | Bloque 12 | Suena el `powUpSnd` del GML |
+
+**VRAM**: la moneda precarga sus 6 frames, 24 tiles: `nextTile` 1433 de 1440, **quedan 7**. El HUD del bloque 9 tendrá que sacar tiles del fondo (`bg2md.py` con menos presupuesto) o de lo que libere el GML.
+
+### Bloque 5: pantallas (2026-11-16)
+
+**Qué cambia:**
+
+- **Splash sin créditos** (Q13): el del GML (logo y marquesina) con "PRESS START" parpadeando donde iban los créditos (21 f encendido y 21 apagado: el "TAP TO START" de MonsterLite, `t % 100 < 50` contado por `OnGUI`). START empieza. La marquesina dice "PRESS START". `g_credits` desaparece.
+- **Game over de MonsterLite** (`S/gameOverSrc.cs`) en vez del interludio KILLS/TOP/NEXT del GML, dentro de la misma banda y con la fuente del sistema (Q16): SCORE, COINS COLLECTED, LEVEL: n!, NEW RECORD! (si se supera el récord de antes de la partida, `g_bestAtStart`), BEST SCORE, y las opciones PLAY / GEAR (izquierda y derecha; A, C o START eligen). PLAY no aparece hasta que SCORE ha terminado. "LAST SCORE" no se dibuja (Q15).
+- **La cuenta** (Q15, el ritmo acelerado del original): en vez de corrutinas, se cuenta cuántas hay en el bucle de SCORE y cuántas en el de COINS, agrupadas por el frame (módulo 24) en que despiertan; corre a 60 Hz (6 pasos cada 5 frames). Simulada contra §2.8: 100/60, 1000/300, 5000/500 y 20000/3000 acaban exactamente en los frames de Update de la tabla. Un tick del PSG por frame en que sube SCORE (el "ding", uno por frame en vez de uno por corrutina).
+- **Fogonazo rojo**: con más de 10 puntos el fondo se pone rojo puro al entrar y vuelve a su paleta con la fracción `counterK / 60` por frame de Update (~0,2 s). Q16: es la imagen de ruinas la que se tiñe.
+- **Tienda GEAR** (`S/StoreMenu.cs`, versión gold), en una banda de las filas 3 a 27: las 4 armas de pago con su nombre y descripción de la tienda (`W/GameAssets.cs`) y "<precio> COINS" (Q14: 6000 / 12000 / 24000 / 48000) o "AVAILABLE!"; "YOUR COINS"; el estante con los iconos de las armas que se pueden elegir y "SELECT YOUR GEAR: <arma>" (izquierda y derecha); "NEXT GEAR AT n KILLS" para PIVOT y PARA (récord del GML); SOUND ON/OFF, MUSIC ON/OFF y PLAY. Arriba y abajo recorren; A, C o START eligen. Comprar descuenta y **equipa** (`setMeOnly`); sin saldo no pasa nada. WBLOCK, comprada de serie. Se descartan el leaderboard, el GEAR de la tienda (no hace nada) y los iconos decorativos de bomba y rayos.
+- **El selector de armas pasa a la tienda** (el estante): el game over ya no lo tiene, como en MonsterLite.
+- **Sonido y música** (`g_soundOn`, `g_musicOn`, `src/audio.c`): apagan efectos, voces y tick, y la música del menú. Se guardarán en SRAM en el bloque 6.
+
+**Divergencias que introduce:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| ~~Sin el logo de Screen Implosion~~ | Resuelto: el usuario reabrió la decisión 3 para él (ver "Logo de Screen Implosion") | — |
+| El splash sigue siendo el del GML (logo SURFIZE y marquesina), no la textura `splash` de MonsterLite con su oscilación | Decisión 3 (arte del GML) | — |
+| Un "ding" por frame | Q15 | — |
+| La cuenta empieza unos 5 f tarde | Los primeros frames del game over cargan con la muerte (medido con 5000/500: 88 y 150 f frente a 83 y 144) | Imperceptible |
+| Sin la entrada deslizándose a 1600 px/s, ni voces "AWESOME" / "CARALLUDO", ni la sacudida al tocar START | Bloque 12 y animación de `OnGUI` | — |
+| PLAY y GEAR se eligen con el pad | No hay pantalla táctil | — |
+
+**Rendimiento**: la banda del menú se repintaba entera, celda a celda, en cada frame mientras crecía (hasta 512 escrituras al VDP por frame) y la cuenta del game over iba al 37 % de su ritmo (`updTick` +22 en 50 f). Ahora sólo se pintan las filas nuevas, de una escritura por fila: +60 en 50 f. Los números se escriben con una conversión propia (`fmtU32`) en vez del `sprintf("%lu")` de SGDK.
+
+### Logo de Screen Implosion (2026-11-16)
+
+Decisión del usuario: el logo se convierte desde el arte de MonsterLite. `tools/ml_logo.py` → `res/sprite/silogo.png` (IMAGE `silogoImage`): `screenImplosionLogo_inv_Square_1800.png` (blanco sobre transparente) reducido por áreas a 108×108 px en 16 grises. Medidas leídas con UnityPy de `logo.unity`: el sprite mide 18 u (1800 px a 100 px/u) con una cámara ortográfica de tamaño 20 (40 u de alto) → 108 px de 240, y va 2 u (12 px) por debajo del centro de la cámara. `Logo_show` (`src/logo.c`) lo enseña al arrancar, sobre negro, 40 f (`WaitForSeconds(0.8)`), con el fundido de entrada del original (alfa de 0 a 0,8, `fadeTime += deltaTime`) hecho con la paleta, y pasa al splash de golpe (el fundido de salida está comentado en el original). Va antes de `Game_init`, con la VRAM libre: no gasta tiles del juego. Usa PAL0, la de la fuente del sistema, y la repone al acabar. Las builds de medida (`PORT_STRESS`, `PORT_BENCH`, `PORT_PROF`) se lo saltan para que sus frames sigan siendo los mismos.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| El fundido va en los 8 niveles del VDP | Paleta de 3 bits por componente | Sube a saltos |
+| Empieza unos 15 f después de encender | Lo que tarda en cargar el driver de sonido (`Audio_init`) | — |
+
+### Bloque 6: guardado en SRAM (2026-11-16)
+
+`inc/save.h`, `src/save.c`. Se guarda: firma, versión, secuencia, récord de puntuación (`g_lastScore`, que pasa a ser el récord guardado), saldo, armas compradas, arma equipada, partidas jugadas, sonido y música, el récord de bajas del GML (`g_maxKills`, que desbloquea PIVOT y PARA) y hueco para los logros del bloque 10. La munición no (Q10).
+
+- **Dos copias alternas** de 64 bytes en los bytes impares, con número de secuencia y suma de control (Fletcher de 16 bits). Al arrancar se carga la válida con la secuencia más alta; si ninguna vale (cartucho nuevo, SRAM corrupta, otra versión), los valores por defecto.
+- **Cuándo**: al entrar en el game over (`setData` de MonsterLite, con `numberOfGames += 1`), al recoger cada moneda (el saldo de Soomla se guardaba en el acto), al comprar y al salir de la tienda con PLAY.
+- **Cabecera** (`src/rom_header.c`): SRAM "RA", tipo 0xF820, 0x200001-0x203FFF (8 KB). `tools/check_header.py` lo comprueba, y también que el ROM no se solape con ella. **El ROM había crecido a 1 MB** (0x100000) en los bloques 3-5 y `rom_end` seguía en 0x0DFFFF: corregido a 0x0FFFFF.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Al salir de la tienda también se guarda | En MonsterLite el arma y el sonido esperaban al game over siguiente | No se pierde si se apaga a mitad de partida |
+| Se guarda el récord de bajas | Desbloquea PIVOT y PARA (GML); el GML no guardaba nada | Esas dos armas siguen desbloqueadas al volver a encender |
+| Hasta el bloque 6 la munición se conservaba hasta apagar; sigue igual | Q10 | — |
+
+**Aviso para probar**: BlastEm guarda la SRAM en `~/.local/share/blastem/<nombre del ROM>/save.sram`. La carpeta `rom/` (la de `out/rom.bin`) ya tenía un `save.sram` de 32 KB del 8 de noviembre, de cuando la plantilla de SGDK declaraba SRAM: no lleva la firma, así que el juego arranca con los valores por defecto y lo sobrescribe en el primer guardado. Las pruebas de este bloque se hicieron con una copia del ROM llamada `savetest.bin` (carpeta `savetest/`) para no tocar ese fichero.
+
+### Bloque 7: power-ups (2026-11-17)
+
+`inc/mlpow.h` y `src/mlpow.c` (nuevos: bomba y rayos), `src/powerup.c` (lo del suelo), `src/projectile.c` (la nave holo), `src/beam.c` (líneas y rayos), `src/game.c` (oleadas, recogida, congelación), `src/enemy.c` y `src/snake.c` (matar todo, posición por ranura, contacto con un círculo), `inc/arena.h` (`ML_BOMB_*`, `ML_RAYS_*`, `ML_HOLO_*`, `ML_POW_FREEZE_F`, `ML_GROUND_POW_MAX`).
+
+**Oleadas** (`mlPowWave`, `S/gameControl.cs:477-571`): la 3 pone una bomba si `Random.Range(0, 6) == 1`; la 4, unos rayos si `Random.Range(0, 7) == 1`; la 6, 16, 19, 20 y 21, una nave holo si hay menos de 10. Todo en `getRandomPos()`: entre el 10 y el 90 % de la pantalla (x 32-287, y 24-215). Nada de MonsterLite mira los agujeros: ya no mueren al caer encima, como los power-ups del GML.
+
+**Bomba** (`Bomba.prefab`, caja 14 px; `S/playerMovement.cs:199-210`): al tocarla, `clearEnemies()` (`S/enemyController.cs:170-186`): cada araña y cada gusano vivo explota y suma `level`, sin soltar nada. También los que aún salen de su agujero: en MonsterLite no hay agujero que esperar (bloque 8). Ya no crea los dos gusanos de tipo 2 de la bomba del GML. Desde el bloque 8 no hay agujero que esperar en el port tampoco.
+
+**Rayos** (`RayosBomba.prefab`, caja 20 px; `S/triggerSplashBomb.cs`, `S/RayoScr.cs`): al tocarlos, un rayo de la nave a cada araña y a cada cabeza (sin enemigos, ninguno). Cada rayo sigue a su objetivo mientras vive y se queda donde estaba si muere. A los 26 f, `clearEnemies()`: mata todo lo que haya entonces, también lo nacido después, y suma `level` por cada uno. `timerRays` es 30 y `RayoScr` hace `timer--; if (timer < 0)`: dispara en el Update 31 = 25,8 f. §2.7 decía 25. El temporizador corre también con el tiempo parado (es `Update`), y puede limpiar la pantalla con el juego congelado, como en MonsterLite.
+
+**Congelación** (Q17): `Thread.Sleep(100)` al tocar la bomba o los rayos = **5 frames** sin correr nada (`hitstop` en `playUpdate`). Medido en el arnés: la X de la nave queda fija mientras las bajas pasan de 0 a 11.
+
+**Nave holo** (`naveProxy.prefab`; vive en el pool de proyectiles como `PROJ_TRI`, con el arte de la réplica del GML):
+- inactiva: gira 1,2°/f (también con el tiempo parado);
+- al tocarla (esfera de 3,6 + 5,4 px = 9 px) se activa para siempre, con la voz repetea;
+- activa: apunta al enemigo más cercano **a ella** (arañas y cabezas) y dispara `BulletThin` a **6,4 px/f** cada **33 f**, la primera a los 17. No gasta munición, sólo cuenta con enemigo y no dispara con el tiempo parado (`!slowMotion`);
+- activa, muere al tocarla una araña o una cabeza, con una explosión; **desde el bloque 8 (decisión del usuario, 2026-11-20) también la inactiva**, ver "Bloque 8";
+- una línea azul de puntos de la nave a cada holo activa;
+- sobreviven a la muerte y a la partida siguiente, inactivas y activas (`clearPowerUps()` no se llama).
+
+**Rendimiento** (`tools/measure.sh` con arma y munición forzadas; vueltas de 600, más es mejor). La referencia es una copia del código anterior al bloque 7 que había en el scratchpad (16-nov):
+
+| Build | fina | TWAY | MOIRE | LASER | CIRCULAR |
+|---|---|---|---|---|---|
+| Antes del bloque 7 | 473 | 375 | 429 | 407 | — |
+| Bloque 7 sin las oleadas de power-ups | 483 | 377 | 429 | 406 | 509 |
+| Bloque 7 completo | 471 | 356 | 362 | 397 | 503 |
+| 10 holo activas desde el principio (`PORT_STRESS_HOLO`) | 314 | 303 | — | — | — |
+| 6 / 4 holo activas | 378 / 356 | 313 / 331 | — | — | — |
+| 10 holo inactivas | 403 | — | — | — | — |
+
+- **El código nuevo no cuesta nada** (segunda fila contra la primera). La primera versión sí: con los pools agrandados y todo el pool de puntos escondido en cada frame, 427/347. Ahora sólo se esconden los puntos que se enseñaron el frame anterior, y las búsquedas de holos se saltan cuando no hay ninguna (`holoN`).
+- **Lo que baja en el build completo es la escena**: las oleadas dejan bombas, rayos y hasta 10 holos inactivas en el campo (el arnés no se mueve y no las recoge). Las holos inactivas costaban 336 y ahora 403. Su giro sólo recalcula el dibujo uno de cada 8 frames (cambia cada ~37), y el toque descarta por el cuadrado antes de multiplicar. Que el rayo de MOIRE las vea no es lo que cuesta: sin eso da 366.
+- **10 holo activas** cuestan como un arma de las caras: sus balas (sin disparar, 347) y sus líneas (sin líneas, 326), más las bajas y explosiones que provocan. El contacto se mira uno de cada 2 frames y el apuntado uno de cada 4, además del frame en que dispara. Bajar el tope a 6 o a 4 no mejora de forma fiable (la escena cambia más que el coste). **Se queda el tope de MonsterLite, 10 (Q3)**: el caso es el peor posible (arena llena, 10 holos activas) y se nota como ralentización, no como fallo.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Bomba y rayos: como mucho 6 entre los dos en el suelo (`ML_GROUND_POW_MAX`, invención) | No caducan y comparten pool con los paquetes; MonsterLite no los limita | Con 6 esperando, las oleadas 3 y 4 no crean más |
+| Rayos: 3 puntos por rayo (vértices 2, 4 y 6 de 9), color al azar por rayo y frame entre azul, plata y amarillo | El VDP no dibuja líneas; con hasta 11 rayos, 7 puntos serían 77 sprites de 80 | Rayos de puntos con ruido de ±8 px |
+| Línea a las holo: 3 puntos (antes 6 a cada réplica) | 10 líneas × 6 = 60 sprites | Línea más espaciada |
+| La congelación va después del estallido, no antes | En MonsterLite el `Sleep` va primero y el estallido sale al acabar; aquí se congela con las explosiones ya puestas | Ninguna apreciable (100 ms) |
+| Los rayos en curso se pierden si la nave muere | En MonsterLite seguirían y sumarían bajas a una partida ya acabada | El game over no cambia después de morir |
+| Sin explosión azul de la holo ni salpicadura de la bomba (`bombaSplash`): explosión normal | El arte es del GML (decisión 3) y no hay equivalente | — |
+| Sacudidas y voces ("BOOM", "EXPLOSIONS", "RAYS"): las del GML de la bomba y el rayo, y sus sonidos | Son del bloque 12 (Q20) | Hasta entonces la bomba tiembla como la del GML |
+| La holo apunta a su enemigo cada 4 frames, y siempre al disparar; mira el contacto cada 2 | Coste con 10 activas (ver arriba) | Su dibujo puede ir hasta 3 frames tarde |
+| Si un enemigo muere y otro nace en su misma ranura mientras el rayo vive, el rayo pasa a seguir al nuevo | El port no guarda la identidad del objetivo | Sólo cambia hacia dónde se dibuja el rayo: al acabar mata a todos igual |
+| Los enemigos no van a por las holo sin jugador | Es IA de enemigos, bloque 8 | — **Resuelto en el bloque 8** (`enemiesNoPlayer` en `src/game.c`). |
+
+Se retiran del juego el rayo (`oRay`) y la réplica (`oTri`) del GML y su cadencia, que sustituyen los de MonsterLite.
+
+
+### Bloque 8: enemigos (2026-11-20)
+
+`src/entity.c` e `inc/entity.h` (la IA de `enemyMov`), `src/enemy.c` e `inc/enemy.h` (arañas), `src/snake.c` e `inc/snake.h` (gusanos: IA, migas y esferas), `inc/collision.h` (`Coll_circleCircle`), `src/projectile.c` e `inc/projectile.h` (balas y bolas contra esferas, `Proj_anyHolo`), `src/game.c` (destino sin jugador, temporizador con el tiempo parado), `src/hole.c` e `inc/hole.h` (fuera `Hole_wanderTarget` y `Hole_touching`, que sólo usaba la IA del GML), `src/bench.c` e `inc/arena.h` (`ML_TURN_K_*`, `ML_AI_TIMER_*`, radios y `ML_SNAKE_CRUMB_*`; fuera las constantes de la IA del GML y sus máscaras de colisión).
+
+Decisiones del usuario que aplican: Q2 (los dos gusanos del GML con su longitud, con velocidad, IA, hp y eslabones de MonsterLite), Q4 (tope de 8 arañas) y la reversión de agujeros del 2026-11-16 (el anillo del port, con los enemigos naciendo en un agujero al azar).
+
+**Lo que hace ahora el port:**
+
+| Qué | MonsterLite (`S/enemyMov.cs`, `S/headScr.cs`) | Port | Dónde |
+|---|---|---|---|
+| Al nacer | `Start`: rotación `Random.Range(0, 360)`, `randomPos = getRandomPos()`, `setSpeed()`, estado `Random.Range(0, 2)`; visible y en marcha desde el primer tick | igual: rumbo en 1/64 de grado (0-23039), `randomPos` entre el 10 y el 90 % de la pantalla, velocidad por nivel (bloque 1), giro y estado al azar. Sin la espera de 75 f invisible e inmóvil del GML (`alarm[0]`) | `Entity_spawnML` |
+| Estado | ATTACK o WANDER | igual (`ENT_ATTACK`, `ENT_WANDER`); la máquina de 3 estados del GML (quieto 5 f, ataca 250, vaga 500) desaparece | `inc/entity.h` |
+| Temporizador | `timer = 200` [prefab], `timer -= 1` en `Update` (60 Hz); al pasar de 0, `resetMovement()` (estado y `randomPos` nuevos) y `timer = 30`. En WANDER `move()` (FixedUpdate) resta además `level % 100` por tick | en quintos: 1000, −6 por frame (1,2 Update), reinicio a 150; WANDER −5 × (`level % 100`) por frame. **Primer re-sorteo a los 167 f** (MonsterLite 167,5), luego **cada 26 f** (25,8). En WANDER: 14 f en el nivel 1 (150 / 11) y 3 f en el nivel 9 (150 / 51) | `Entity_tickML`, `Entity_moveML` |
+| Destino | ATTACK: el jugador; si no hay, `FindGameObjectWithTag("NaveProxy")`; si tampoco, `target` no cambia. WANDER: `randomPos` | igual. La holo es la de la ranura más baja del pool, activa o no (en Unity, una cualquiera de las que llevan el tag, que son todas). Se busca una vez por frame para todos (`enemiesNoPlayer`) | `src/game.c` |
+| Avance | `Translate(right · speed · 0,02)` con el rumbo de antes de girar | igual: `Entity_advance` antes del giro, con el ángulo calculado desde la posición de antes de avanzar | `Entity_moveML` |
+| Giro | `Slerp(rotación, haciaElDestino, turningSpeed · 0,02)`: una fracción del ángulo que falta; `turningSpeed = Random.Range(1, turningSpeedMax / 1.4)`, máx. 8 araña y 10 gusano [prefab] | fracción `turnK / 4096` por frame, sorteada entera al nacer en [82, 468] (araña) o [82, 585] (gusano), por el camino corto. Un `muls.w` por enemigo y frame | `Entity_moveML` |
+| Con el tiempo parado | `FixedUpdate` no corre (no se mueven) pero `Update` sí: el temporizador sigue bajando y re-sorteando | igual: `stoppedUpdate` llama a `Enemy_tickFrozen` y `Snake_tickFrozen`. Con la congelación de la bomba y los rayos (`Thread.Sleep`) no corre nada, tampoco esto | `src/game.c` |
+| Wrap | no | no (ya era así) | — |
+| Colisión | `SphereCollider`: araña 0.28 × 1.5 = **8,4 px**; cabeza y eslabón 0.32 × 1.5 = **9,6 px** | círculos con distancias enteras al cuadrado (`ML_R2_LT`): nave contra araña d² ≤ 143 (12 px), contra gusano d² ≤ 174 (13,2 px); holo contra araña 190 (13,8 px) y cabeza 224 (15 px); bola CIRCULAR (4 px) contra araña 153 (12,4 px) y cabeza 184 (13,6 px); bala de 16×16 contra la esfera, el punto de la caja más cercano (`Coll_circleBox`); rayo, los mismos radios | `inc/arena.h`, `inc/collision.h` |
+| hp del gusano | 4 [prefab culobicho] | 4 en los dos tipos (ya desde el bloque 3; el tipo 2 del GML tenía 2) | `ML_SNAKE_HP` |
+| Cuerpo | 16 eslabones; migas: cuando la cabeza se aleja `segmentSpacing` = 0,4 u (**8 px**) [prefab] de la última, se pone otra en la cabeza y cada eslabón salta a la suya (Lerp con t = 0, sin suavizado). Corre en `Update` | **12 y 10 eslabones** (Q2) con las migas de MonsterLite: la distancia se mide en 1/64 de píxel contra la miga exacta; el eslabón n está en la miga n + 1, así que poner una miga es correr la lista de eslabones un puesto. El historial de 128 posiciones por gusano del GML (`stepdelay`) desaparece | `crumbStep` (`src/snake.c`) |
+
+**Comprobado por RAM** (`p/d` sobre `enemies` y `snakes` de `out/release/symbol.txt`; scripts del scratchpad, no del repo):
+
+- **Nivel 1** (arnés de estrés, araña 0, en WANDER): velocidad 40/64 = 0,625 px/f (MonsterLite 0,472-0,72); paso medido entre frames 0,60-0,62 px (el rumbo va a grados enteros en la tabla de seno). El rumbo pasa de 63,33° a 60,97° en el primer frame: le faltaban 21,7° hacia su destino (245, 109) y gira 444/4096 = 10,8 % de eso; converge a 37,6°, el ángulo al destino. El temporizador baja 11 quintos por frame (6 + 5 × 1).
+- **Nivel 9** (copia con `g_level` fijo a 9, sólo en el scratchpad): las 8 arañas a 0,844 / 0,891 / 1,453 / 2,141 / 2,891 / 3,672 / 3,719 / 3,797 px/f (MonsterLite 0,79-3,92); fracciones de giro 109-444 (rango 82-468); en WANDER el temporizador baja 51 por frame (6 + 5 × 9).
+- **Re-sorteos** (copia en la que la nave no dispara, para que no mueran): el primero a los 181 frames emulados, que son los 167 del juego más los que pierde el arnés de estrés; después cada 26 frames en ATTACK y cada 14 en WANDER, con estados al azar.
+- **Tiempo parado** (ROM normal, soltando B con un gusano en pantalla): la cabeza se queda en (204,06, 122,14) 40 frames seguidos mientras su temporizador baja de 736 a 508, 6 por frame; al volver a pulsar B sigue.
+- **Capturas**: arnés de estrés a +60, +120 y +300 frames de START+A: el gusano de 12 eslabones a 8 px entre ellos y las arañas repartidas por la pantalla, sin esperar en los agujeros.
+
+**Rendimiento** (`tools/measure.sh` y la misma medida con el arma y la munición forzadas o con 10 holo activas, como en el bloque 7; vueltas de 600, más es mejor; la referencia es una copia del árbol antes del bloque, en el scratchpad):
+
+| Build | fina | TWAY | MOIRE | LASER | CIRCULAR | 10 holo activas |
+|---|---|---|---|---|---|---|
+| Antes del bloque 8 | 482 (21 bajas) | 356 (23) | 362 (23) | 397 (30) | 503 (26) | 321 (17) |
+| Bloque 8 | **501 (32 bajas)** | 435 (34) | 411 (29) | 411 (38) | 505 (47) | 334 (26) |
+
+`tools/measure.sh` da lo mismo en dos pasadas (470/32 con la primera versión, 501/32 con la final). Las partidas no son la misma escena (cambian la IA, la aparición y los radios), así que las bajas no se comparan entre las dos filas, y por eso tampoco la firma de +300/+400.
+
+- **La primera versión daba 470/600** (frente a 482). Perfilado por etapas (`PORT_PROF=2`, líneas de VDP por frame): el código del gusano bajaba de 48,7 a 37,5 (la caché de partes, de 13,7 a 4,0, sin el historial de 128 posiciones), pero la escena costaba más: con los enemigos visibles desde que nacen hay más que dibujar (montaje de sprites de 60,7 a 71,8) y con las esferas más grandes que las cajas del GML hay más bajas (efectos de 12,0 a 18,9).
+- **Arreglo**: los eslabones sólo se mueven al poner una miga (cada 2 a 11 frames según la velocidad), así que sus sprites sólo se recolocan entonces o cuando cambia la cámara de la sacudida (`partsDirty`, `drawBX/drawBY`). El gusano queda en 29,9 líneas por frame (de 48,7 antes del bloque) y el caso peor en **501/600**.
+- **RAM**: el historial del GML eran 2 × 128 × 2 bytes por gusano; las migas, 4 bytes más. Unos 1,5 KB menos.
+- No hay divisiones nuevas en el bucle: `level % 100` sólo se calcula cuando cambia el nivel (`wanderStep`).
+
+**Divergencias que introduce este bloque:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| **Los gusanos siguen siendo dos, de 12 y 10 eslabones**, en vez de uno de 16 | Q2 (decisión del usuario) | Gusanos más cortos que en MonsterLite: 96 y 80 px de cuerpo frente a 128 |
+| **Los eslabones siguen las migas de 8 px de MonsterLite, no el `stepdelay` del GML** | **Decisión del usuario (2026-11-20, `docs/MONSTERLITE_DECISIONES.md`)**. Con la velocidad de MonsterLite (hasta 3,92 px/f) el `stepdelay` de 6 f separaba los eslabones hasta ~24 px: el gusano de 12 llegaba a medir ~280 px, casi la pantalla. Con las migas mide lo que medía en el GML a su velocidad (7-11 px por eslabón, 84-131 px) | Los eslabones avanzan a saltos de 8 px (como en MonsterLite, que no suaviza) en vez de deslizarse; separación constante a cualquier velocidad |
+| Las migas se miran una vez por frame de 50 Hz, no en `Update` (60 Hz) | No hay `Update` aparte | Separación de 8 a 11,9 px (MonsterLite: 8 a 11,3) |
+| El giro deja de avanzar cuando faltan menos de 2048 / `turnK` sesentaicuatroavos de grado (0,39° con el giro más lento) | Redondeo de la fracción en Q12; `Slerp` en flotante converge sin fin | Ninguna visible: el rumbo se usa a grados enteros |
+| No se reproduce que `Quaternion.Euler(pos)` reciba la posición X e Y del enemigo como ángulos de inclinación (`S/enemyMov.cs:107`: `pos = (x, y, ángulo)`) | Es un efecto colateral: inclina el sprite unos grados en X e Y (hasta 8° y 6°, la posición en unidades) y `lockZ` sólo fija la posición | En MonsterLite el enemigo avanza hasta un 1 % menos cerca de los bordes y se ve ligeramente escorzado; aquí no |
+| No se porta `if (position == target) resetMovement()` (`S/enemyMov.cs:63`) | Comparación exacta de flotantes: en la práctica no salta nunca | — |
+| `resetMovement` pone `target` en el jugador; aquí no | No se ve: en ATTACK `move()` lo vuelve a poner en el jugador en el tick siguiente, y en WANDER lo pisa `randomPos` | — |
+| `target` sin inicializar es (0, 0) del mundo: el centro de la pantalla | Cámara en el origen (`S/cameraScript.cs`) | Sólo cuenta si nace en ATTACK sin jugador ni holo |
+| Las armas del GML (PIVOT, PARA, metralla, explosión de la bomba del GML) golpean ahora las esferas de MonsterLite con sus cajas, en vez de caja contra caja | Un enemigo tiene una sola forma de colisión | Contacto algo más generoso que con las cajas del GML (12×12 frente a un círculo de 16,8 px de diámetro) |
+| Los eslabones siguen parando las armas del GML (escudo) y siguen sin parar las balas de MonsterLite | Como en el bloque 3 | — |
+| La bola CIRCULAR choca como esfera de 4 px (antes, su caja de 8×8) | La esfera de `circularBullet` | Contacto en diagonal algo más corto que con la caja |
+| El arnés de estrés es más caro de jugar | Con los enemigos visibles desde el principio y radios mayores hay más bajas y más que dibujar | Ver la tabla: la medida mejora igual por el ahorro del gusano |
+
+**Migas frente a `stepdelay`: resuelto.** La decisión 4 de `port-arena.md` decía "longitud fiel (12 y 10 partes según tipo, `stepdelay` del GML)" y Q2 no nombraba el seguimiento. El usuario decidió el 2026-11-20 mantener las migas de 8 px (`docs/MONSTERLITE_DECISIONES.md`).
+
+#### Dos arreglos tras la verificación (2026-11-20)
+
+**1. Sprites por línea al nacer el gusano.** Los eslabones nacen todos en la cabeza (`headScr.Start`) y se separan de uno en uno, una miga cada 8 px: el último tarda unos 96 px de recorrido de la cabeza. Mientras tanto la pila eran 12 sprites en las mismas líneas, y con dos gusanos naciendo a la misma altura el arnés de estrés llegaba a **31 sprites y 496 px en la línea 145** a +4 frames de START+A (el VDP pinta 20 por línea): se perdían los paquetes del suelo, entre ellos los de (90,130) y (210,130). Lo encontró el verificador.
+
+Arreglo (`spread` en `src/snake.c`): cuenta las migas puestas desde que nació el gusano. Tras k migas, los eslabones 0 .. k−2 ya están en su sitio y del k−1 en adelante siguen apilados en el punto de nacimiento; sólo se coloca el primero de la pila. Los demás siguen aparcados desde `hideSprites` al nacer, así que no hay que esconderlos ni comparar posiciones: el bucle del cuerpo sólo llega hasta `spread`, y oCu1 y oCu2 no se colocan hasta que les toca. En pantalla es lo mismo: los apilados están en el mismo píxel. Las colisiones no cambian (siguen usando las posiciones).
+
+Medido con `vs` en el arnés, en el mismo momento: **la peor línea pasa de 31 sprites (496 px) a 9 (144 px)** y ninguna supera los 20; se ven los 8 paquetes. A +30 frames, 6 eslabones de cuerpo ya separados; a +80, 20 (de 25); a +120 la captura enseña el gusano entero.
+
+**2. La holo era inmortal fuera de la partida.** En el game over y en la tienda los enemigos en ATTACK van a por la holo (bien: `enemiesNoPlayer`), pero ahí no corre `Proj_update`, que es donde se mira si la tocan, así que no moría y pasaba a la partida siguiente (`Proj_clearKeepTris`). En MonsterLite `collideAndDie` la destruiría al primer contacto, porque la física no se para en el game over. Lo vio el verificador: 800 frames con 5-8 enemigos encima y la holo viva.
+
+Arreglo: `Proj_holoContact()` (`src/projectile.c`) hace sólo la prueba de contacto de `updateHolo` (todas las holos, ver el punto 3; mismos radios: 13,8 px con la araña y 15 px con la cabeza) y la explosión, sin tocar el resto de `Proj_update`. La llama `enemiesNoPlayer` cuando hay holo, así que corre en la rama fuera de `GAME_PLAY` y también en los 40 f del arranque, que tampoco corren `Proj_update`. Cada frame en vez de uno de cada dos: fuera de la partida no hay más carga.
+
+Comprobado con `PORT_STRESS_MORTAL` (una holo activa, la nave puede morir), leyendo `holoN` y `g_state` cada 40 frames: la nave muere hacia +120 (estado `GAME_MENU`) y la holo desaparece entre +200 y +240, en el game over. Control con la misma ROM sin la llamada: la holo sigue viva a +1200.
+
+**3. La holo inactiva también muere al contacto** (decisión del usuario, 2026-11-20, `docs/MONSTERLITE_DECISIONES.md`). `S/collideAndDie.cs` es sólo `OnTriggerEnter`: si lo que entra lleva el tag `snake` (la cabeza) o `arana`, explosión azul y `Destroy`. El componente empieza desactivado y lo habilita `setWorking` (`S/naveProxyController.cs:51`), y por eso el bloque 7 hacía morir sólo a las activas. Pero Unity manda los eventos de trigger también a los MonoBehaviour desactivados, y la holo inactiva tiene el mismo `SphereCollider` de 5,4 px que la activa (es con el que la nave la toca para activarla, `S/playerMovement.cs:224`). Así que en MonsterLite la inactiva también muere. En el port, además, `Proj_anyHolo` puede elegir una inactiva como destino de ATTACK sin jugador, y en el game over los enemigos la rodeaban para siempre. Lo vio el verificador.
+
+Arreglo: `updateHolo` mira el contacto (uno de cada 2 frames, como antes) antes de separar activa e inactiva, y `Proj_holoContact` ya no filtra por `released`. Mismos radios y misma explosión. No cambia nada más del bloque 7: la nave sigue activándolas al tocarlas (`Proj_holoTouch`), una holo muerta libera su sitio en el tope de 10 (`hide` baja `holoN`), y `Proj_clearKeepTris` sigue conservando las que quedan vivas. Con el tiempo parado no se mira (la física de Unity está parada; `Proj_tickFrozen` sólo gira la inactiva).
+
+Comprobado en una copia del arnés con tres holos inactivas, en (218,85) (encima de un agujero), (160,148) y (190,120) (cerca de la nave), y sin las holos de las oleadas, leyendo `holoN`: con el cambio quedan 3 en el primer frame, 1 a +40 y ninguna a +80. Control con la misma copia y el comportamiento anterior (sólo mueren las activas): las 3 siguen vivas a +600.
+
+**Rendimiento de los arreglos.** `tools/measure.sh`: **497/600 y 32 bajas** (antes de los arreglos, 501/32; dos pasadas iguales). La holo fuera de la partida no corre en el arnés; quitándola da 498. Sin aparcar la pila, 500. Pero el perfil por etapas (`PORT_PROF=2`) dice que con la pila aparcada el frame es **más barato**, no más caro: el gusano de 30,3 a 27,2 líneas por frame y el montaje de sprites de 72,6 a 71,5. Con la misma escena (las mismas 32 bajas), la diferencia de 3 vueltas de 600 (0,5 %) es de fase: el arnés va al borde del frame y cuánto trabajo cae a cada lado del vblank cambia con poco. Una variante que sólo mueve la disposición de `snake.c` da 497 igual.
+
+Con el punto 3: **508/600 y 37 bajas** (dos pasadas iguales). Es otra escena: las holos inactivas que dejan las oleadas en el arnés (la nave no se mueve y no las recoge) mueren ahora cuando pasa un enemigo, y hay menos que mover y dibujar. Con 10 holos activas (`PORT_STRESS_HOLO`), donde la escena no cambia: **333/26**, frente a 334/26.
+
+
 
 ## Pruebas realizadas
 
 | Fecha | Prueba | Resultado |
 |---|---|---|
+| 2026-11-20 | Bloque 8: `make`, `make GFXDEBUG=1`, `PORT_BENCH=1` con `PORT_VRAM_REPORT=1`, `PORT_STRESS=1` (también con `PORT_STRESS_MORTAL` y `PORT_STRESS_HOLO`), `PORT_PROF=2`, `tools/check_header.py` | ✅ sin avisos |
+| 2026-11-20 | Araña por RAM en el arnés, niveles 1 y 9 (velocidad, rumbo, destino, temporizador, fracción de giro) | ✅ dentro de los rangos de §2.6; re-sorteo a los 167 f de juego y luego cada 26 f (ATTACK) y 14 f (WANDER, nivel 1) |
+| 2026-11-20 | Gusano con el tiempo parado (ROM normal, soltando B) | ✅ quieto 40 frames con el temporizador bajando 6 por frame |
+| 2026-11-20 | `tools/measure.sh`, dos pasadas | ✅ 501/600 y 32 bajas las dos (antes del bloque, 482/21) |
+| 2026-11-20 | Holo inactiva al contacto: copia del arnés con 3 holos inactivas; `tools/measure.sh` y `PORT_STRESS_HOLO`; las 7 variantes | ✅ las 3 mueren antes de +80 (control: vivas a +600); 508/37 y 333/26; sin avisos |
+| 2026-11-20 | Arreglos de la verificación: `vs` a +4 frames en el arnés; holo con `PORT_STRESS_MORTAL` en el game over; las 7 variantes de compilación; `tools/measure.sh` dos pasadas | ✅ peor línea de 31 a 9 sprites; la holo muere en el game over (control sin el arreglo: viva a +1200); sin avisos; 497/600 y 32 bajas (fase, ver "Bloque 8") |
+| 2026-11-17 | Bloque 7: `make`, `make GFXDEBUG=1`, `PORT_BENCH=1`, `PORT_STRESS=1` (también con `PORT_STRESS_MORTAL` y `PORT_STRESS_HOLO`), `tools/check_header.py` | ✅ sin avisos |
+| 2026-11-17 | Bomba junto a la nave en el arnés (8 arañas y 3 gusanos), nave a la derecha | ✅ 11 bajas y +11 de puntuación en el nivel 1; la X de la nave queda fija mientras las bajas pasan de 0 a 11 (congelación) |
+| 2026-11-17 | Rayos junto a la nave en el arnés | ✅ rayos de puntos hacia los enemigos (también dentro de los agujeros); al acabarse, bajas de 3 a 12 |
+| 2026-11-17 | Nave holo junto a la nave | ✅ azul e inactiva; al tocarla, línea de puntos azul a la nave y bala hacia el agujero de arriba |
+| 2026-11-17 | Arnés 1500 f con las oleadas reales | ✅ nivel 7, ~8 holo inactivas y 3 cajas de bomba o rayos en el campo |
+| 2026-11-17 | Rendimiento (ver la tabla del bloque 7) | ✅ el código nuevo no cuesta; 10 holo activas: 314/600 |
+| 2026-11-16 | Botones A y C (decisión del usuario): `make` sin avisos; en BlastEm, A en el splash empieza la partida; sin botón sale "HOLD A/B/C" sobre el agujero de abajo y el tiempo se para; con C mantenido el tiempo corre (la nave pasiva acaba en el game over) | ✅ |
+| 2026-11-16 | Logo y bloque 6: `make`, `GFXDEBUG=1`, `PORT_BENCH=1`, `PORT_STRESS=1`, `tools/check_header.py` | ✅ sin avisos; cabecera con `rom_end` 0x0FFFFF y SRAM 0x200001-0x203FFF |
+| 2026-11-16 | Logo: capturas a los 20, 35 y 52 f de encender | ✅ en negro hasta que carga el driver de sonido; "SCREEN IMPLOSION" y el recuadro de círculos centrados, en gris subiendo; después el splash con la fuente en blanco |
+| 2026-11-16 | Persistencia (copia `savetest.bin`): comprar LASER con 10000, salir con `quit`, volver a arrancar | ✅ saldo 4000, compradas WBLOCK y LASER, 1 partida; ❌ arma equipada WBLOCK (se guardaba antes de equipar); ✅ corregido: con TWAY, 18000, compradas 7, arma 2 |
+| 2026-11-16 | Corrupción a mano del `save.sram` | ✅ con la copia más reciente estropeada carga la anterior (4000, WBLOCK y LASER); con las dos, valores por defecto (0, WBLOCK) |
+| 2026-11-16 | Bloque 5: `make`, `GFXDEBUG=1`, `PORT_BENCH=1`, `PORT_STRESS=1` | ✅ sin avisos |
+| 2026-11-16 | Modelo de la cuenta del game over contra la tabla de §2.8 (Python) | ✅ 14/42, 45/117, 100/173, 200/417 frames de Update: iguales |
+| 2026-11-16 | Recorrido con el pad: splash, START, partida, game over, GEAR, comprar LASER con 10000 por RAM, PLAY | ✅ PRESS START parpadea; game over con SCORE, COINS COLLECTED, LEVEL, BEST SCORE, PLAY/GEAR; tienda; saldo 10000 → 4000, arma 1 (LASER), "AVAILABLE!", la partida siguiente empieza con el LASER |
+| 2026-11-16 | Ritmo de la cuenta con 5000 / 500 forzados por RAM | ❌ 136 y 198 f (la banda repintándose entera perdía frames); ✅ 88 y 150 f (MonsterLite: 83 y 144) |
+| 2026-11-16 | Bloque 4: `make` | ✅ sin avisos |
+| 2026-11-16 | Reparto moneda/paquete, contadores temporales en una copia, arnés, 3000 f | ✅ WBLOCK 55/56 (119 bajas), LASER 64/59 (128 bajas); la diferencia son bajas por metralla |
+| 2026-11-16 | Moneda: nave puesta por RAM encima | ✅ saldo y partida +60; vuela a 3,14 px/f hacia abajo |
+| 2026-11-16 | Paquete: nave puesta por RAM encima, WBLOCK | ✅ munición 154 → 164 (+10); sube y se acaba en 2 f (le quedaban 57 de vida) |
+| 2026-11-16 | Capturas en partida | ✅ monedas doradas girando, paquetes, COINS abajo |
+| 2026-11-16 | Caso peor tras el bloque 4 | fina 471/600 (20 bajas), TWAY 375 (21), CIRCULAR 503 (29); antes 465, 384, 516 |
+| 2026-11-16 | Desplazamiento del WBLOCK, con UnityPy | `distanceToGun` es media anchura del sprite de la nave (`nave.png`, 58 px): 5,8 px, no 11,6. Corregido a 6 |
+| 2026-11-16 | Bloque 3: `make` | ✅ sin avisos |
+| 2026-11-16 | Cada arma con 200 de munición forzada por RAM, 200 f, capturas | ✅ WBLOCK, LASER, TWAY, CIRCULAR y MOIRE disparan y gastan; ❌ el haz con el segmento de láser del GML no se veía (estaba en la tabla de sprites); ✅ con puntos amarillos |
+| 2026-11-16 | CIRCULAR, 400 f | ❌ las bolas iban al eslabón más cercano y se quedaban pegadas (2 bajas); ✅ con arañas y cabezas (`getClosest`) |
+| 2026-11-16 | Bala fina, 600 f, nave quieta | ❌ 0 bajas apuntando al eslabón más cercano; ✅ apuntado a arañas y cabezas; con la nave inmortal, 27 bajas |
+| 2026-11-16 | Impactos por muerte de gusano, contador temporal en una copia (900 f, arnés) | ✅ fina 6, 6, 6, 6 (y 3, 5: gusanos tocados por la metralla); gorda 3, 3, 3, 3, 3, 3 (y 4, 4) |
+| 2026-11-16 | Caso peor por arma | ver la tabla del bloque 3 |
+| 2026-11-16 | Selector tras una partida: derecha cuatro veces | ✅ 0 → 1 → 2 → 5 → 6 (salta PIVOT y PARA), marquesina " MOIRE ", NEXT 80, iconos nuevos en su sitio |
+| 2026-11-16 | VRAM y RAM | ✅ `nextTile` 1411 de 1440 (29 libres; los iconos se llevan 32); `.data` + `.bss` = 14 524 bytes |
+| 2026-11-16 | Agujeros verdes: `make` y capturas del menú y de la partida | ✅ sin avisos; agujeros verdes, reborde rojo al salir un gusano; logo, HUD y CREDITS con sus colores de antes |
+| 2026-11-16 | Movimiento del GML y fondo verde: `make` | ✅ sin avisos |
+| 2026-11-16 | Nave por RAM, derecha + abajo durante 10 f | ✅ (10240, 7680) → (11160, 8600): 920/64 = 14,375 px por eje, 1,4375 px/f en cada eje también en diagonal |
+| 2026-11-16 | Capturas del menú y de la partida con el fondo verde | ✅ verde oscuro, nave, agujeros, HUD y texto bien distinguibles |
+| 2026-11-16 | Reversión de agujeros y aparición: `make` | ✅ sin avisos |
+| 2026-11-16 | Aparición de la nave, por RAM a los 45 f de pulsar START | ✅ (10240, 7680) en fix16 = (160, 120) |
+| 2026-11-16 | VRAM con el anillo | ✅ `nextTile` 1379 de 1440 (**61 libres**, antes 36); `holeLoaded` 43; 4 celdas compuestas |
+| 2026-11-16 | Capturas: splash y partida con B pulsado | ✅ anillo de seis agujeros sin recortes; CREDITS compuesto encima del agujero de abajo; logo entero; reborde rojo al salir los gusanos |
+| 2026-11-16 | `tools/measure.sh` | 484/600, 24 bajas (HEAD, hexágono) → **533/600, 15 bajas**. No es la misma partida (otra disposición, otras bajas), así que sólo dice que no hay un retroceso visible |
 | 2026-11-15 | Bloque 2 terminado: `make` completo, `GFXDEBUG=1` y `PORT_BENCH=1` | ✅ 0 avisos en los tres |
 | 2026-11-15 | Q8 por RAM (`startFrames`, `graceFrames`, `holdShown`, nave y cabeza de gusano) | ✅ sin B se para a los 25 f (la secuencia de arranque queda en 25 y la nave no entra); con B sigue; al soltar B la cabeza no se mueve en 60 f y el aviso está puesto; al volver a pulsar, sigue y el aviso se quita |
 | 2026-11-15 | Q8 con `GFXDEBUG=1` | ✅ con el panel abierto y sin B la cabeza se mueve; B enciende y apaga el plano B; al cerrar el panel, sin B se congela con el aviso |

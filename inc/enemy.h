@@ -7,12 +7,13 @@
 // ===========================================================================
 // Araña (oSpider)
 //
-// Nace en un agujero (siempre el 4 en el original), invisible e inmóvil
-// durante 90 frames, y luego corre la misma máquina de 3 estados que las
-// cabezas de gusano con velo = 3: 0.72 px/frame de avance y 3.6 grados/frame
-// de giro. hp = 0 y las balas restan 4, así que muere de un impacto.
+// Nace en un agujero al azar (createSpider de MonsterLite), ya visible y en
+// marcha, y corre la IA de enemyMov (bloque 8, ver inc/entity.h) con los
+// valores del prefab de la araña: maxSpeed 1, turningSpeedMax 8. Muere de
+// cualquier impacto.
 //
-// Tocarla mata al jugador (oMalo/Collision_oPlayer).
+// Choca como la esfera de MonsterLite: 8,4 px de radio alrededor de su
+// posición (ML_SPIDER_RADIUS_X10). Tocarla mata al jugador.
 // ===========================================================================
 
 // Celda de 24x24 con el origen (30,40 de 64x64) en el centro, por lo mismo
@@ -27,13 +28,18 @@
 
 void Enemy_initAll(void);
 
-// Crea una araña en su agujero, invisible y con alarm[0] en marcha.
+// Crea una araña en un agujero al azar, si queda ranura (tope de 8, Q4).
 void Enemy_spawn(void);
 
-void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py);
+// Un frame de las arañas: move() y Update() de enemyMov. (tx, ty) es el
+// destino de ATTACK, si hasTarget: el jugador o, sin él, una nave holo.
+void Enemy_updateAll(bool hasTarget, fix16 tx, fix16 ty);
 
-// TRUE si alguna araña visible toca la nave: el círculo de MonsterLite de
-// centro (cx, cy) y radio 3,6 px (ML_PLAYER_R2) contra la caja de la araña.
+// Con el tiempo parado sólo corre el Update de enemyMov: el temporizador
+// sigue bajando y re-sorteando (Entity_tickML).
+void Enemy_tickFrozen(void);
+
+// TRUE si alguna araña toca la nave: esfera de 3,6 px contra la de 8,4.
 bool Enemy_collides(s16 cx, s16 cy);
 
 // Posición (origen) de la araña viva más cercana a (x, y) en píxeles.
@@ -42,7 +48,7 @@ bool Enemy_collides(s16 cx, s16 cy);
 // que el que corra después pueda descartar por caja (ver Snake_closest).
 bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY, s32 *best);
 
-// Resta DMG_TO_SPIDER a la araña que solape la caja dada. TRUE si ha habido
+// Resta dmg a la araña cuya esfera toque la caja dada (Coll_circleBox). TRUE si ha habido
 // impacto; *killed a TRUE si ha muerto.
 // El daño lo pone QUIEN GOLPEA porque el manejador que corre es el del
 // enemigo: oSpider/Collision_oBulletS resta 4 y Collision_oDestro resta 1.
@@ -61,6 +67,21 @@ bool Enemy_damageNoKill(s16 x, s16 y, s16 w, s16 h, s16 dmg);
 // rechazo en X es una sola comparación sin signo.
 bool Enemy_hitPoint(s16 x, s16 y, s16 dmg, bool *killed);
 
+// La bola CIRCULAR (esfera de 4 px) contra las arañas: círculo de centro
+// (cx, cy) con r2/reach de la suma de radios (ML_BALL_SPIDER_*). La araña
+// que toca muere. TRUE si ha tocado alguna.
+bool Enemy_hitCircle(s16 cx, s16 cy, s16 r2, s16 reach, bool *killed);
+
+// El rayo de LASER y MOIRE (S/RaycastScr.cs): la araña viva más cercana a
+// lo largo del rayo que sale de (ox, oy) con dirección (c, s), con el radio
+// de MonsterLite. Devuelve su distancia en 1/64 px (o -1) y en *which su
+// entrada para Enemy_killLive, válida hasta que cambie la lista.
+s32 Enemy_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s, u16 *which);
+
+// Mata sin mirar el hp (el rayo destruye la araña) y devuelve su posición
+// (x e y pueden ser NULL).
+void Enemy_killLive(u16 n, fix16 *x, fix16 *y);
+
 // oBombaExp: hace daño a todo lo que solape su caja. Devuelve cuántas
 // arañas ha matado.
 u16 Enemy_damageArea(s16 x, s16 y, s16 w, s16 h);
@@ -71,6 +92,18 @@ u16 Enemy_damageArea(s16 x, s16 y, s16 w, s16 h);
 // Enemy_clearAll(). Ver src/game.c (POW_BOOM) y el informe.
 
 void Enemy_clearAll(void);
+
+// Bloque 7. TRUE si alguna araña toca el círculo de centro (cx, cy): r2 y
+// reach son los de la SUMA de los dos radios (Coll_circleCircle), p. ej. la
+// nave holo con ML_HOLO_SPIDER_*.
+bool Enemy_touchCircle(s16 cx, s16 cy, s16 r2, s16 reach);
+
+// clearEnemies() de MonsterLite: todas las arañas vivas explotan y
+// desaparecen. Devuelve cuántas.
+u16 Enemy_explodeAll(void);
+
+// Posición de la araña de la ranura slot (0..MAX_SPIDERS-1), si vive.
+bool Enemy_slotPos(u16 slot, s16 *x, s16 *y);
 
 u16 Enemy_countAlive(void);
 

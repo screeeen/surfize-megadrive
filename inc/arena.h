@@ -76,75 +76,46 @@
 // Constantes de jugabilidad, todas leídas del GML
 // ---------------------------------------------------------------------------
 
-// oPlayer/Create_0 + Step_0. La velocidad (acc = 6 -> 1,44 px/f) y el margen
-// del wrap (offSet = 15 -> 3 px) del GML ya no se usan: son los de
-// MonsterLite, ver "Jugador de MonsterLite" más abajo.
-#define SHOOT_INT_DEFAULT   GML_FRAMES(12)      // controlTime 12 -> 10 f
+// oPlayer/Create_0 + Step_0. Desde el bloque 3 de MonsterLite el disparo es
+// el de MonsterLite (ML_SHOT_* más abajo); del GML sólo queda la cadencia de
+// las dos armas que MonsterLite no tiene, PIVOT y PARA.
 #define SHOOT_INT_WEAPON    GML_FRAMES(6)       // controlTime 6  -> 5 f
-#define SHOOT_INT_3WAY      GML_FRAMES(12)      // 3WAY           -> 10 f
 
-// Balas: oBulletThin/oWBlock/o3way vspeed -32, oBulletPara -64, oLaser 40
-#define BULLET_SPEED_THIN   GML_SPEED(32)       // -> 7.69 px/f
+// oBulletPara vspeed -64. (Las balas fina, WBLOCK y 3WAY y el láser del GML
+// ya no se usan: van con los valores de MonsterLite, ML_BULLET_SPEED y
+// ML_LASER_*.)
 #define BULLET_SPEED_PARA   GML_SPEED(64)       // -> 15.36 px/f
-#define LASER_SPEED         GML_SPEED(40)       // -> 9.59 px/f
-#define LASER_SPACING       GML_LEN(32)         // i*32           -> 6 px
-#define LASER_LIFE          GML_FRAMES(8)       // alarm = 8      -> 7 f
-// largo = 10 en el original: diez segmentos encadenados cada 32 px del room
-// forman un haz de 60 px en pantalla.
-//
-// Estuvo recortado a 3 por un cálculo mío equivocado: creí que competían por
-// los 80 objetos Sprite del VDP, pero los segmentos salen del pool de 14
-// proyectiles, que ya estaba reservado. Con cadencia 5 y vida 7 llegan a
-// haber ~14 segmentos en vuelo, justo el tamaño del pool, así que en fuego
-// sostenido se puede perder alguno (igual que el 3WAY).
-#define LASER_COUNT         10
 #define WEAPON_SPAWN_DIST   GML_LEN(100)        // bomba/rayo     -> 20 px
-#define THREEWAY_SPREAD     FIX16R(30.0)        // direction +-30 grados
 
-// Máquina de estados de enemigo (stSteadyW / stAppearA1W / stWalkingA1W)
-#define ENEMY_APPEAR_DELAY  GML_FRAMES(90)      // alarm[0] = 90  -> 75 f
-#define ST_STEADY_TIME      GML_FRAMES(6)       // -> 5 f
-#define ST_ATTACK_TIME      GML_FRAMES(300)     // -> 250 f
-#define ST_WANDER_TIME      GML_FRAMES(600)     // -> 500 f
-#define WANDER_TURN         GML_TURN(2)         // 2 grados/f     -> 2.4
-
-// OJO (bloque 1 de MonsterLite): las velocidades de avance de araña y gusano
-// de abajo (SPIDER_SPEED, SNAKE1_SPEED_*, SNAKE2_SPEED) ya NO se usan: la
-// velocidad sale de setSpeed por nivel (Entity_mlSpeed, ML_*_MAX_MU). Se
-// quedan como referencia del GML. Los giros y el hp siguen siendo del GML
-// hasta el bloque 8.
+// La máquina de estados del GML (stSteadyW / stAppearA1W / stWalkingA1W:
+// quieto 6, ataca 300 y vaga 600 frames, aparición con alarm[0] = 90, giro
+// en grados fijos: velo de cada bicho al atacar, 2 grados al vagar) ya no se
+// usa desde el bloque 8 de MonsterLite: la sustituye la IA de enemyMov
+// (ML_TURN_K_*, ML_AI_TIMER_*, arriba en este fichero) y los enemigos nacen
+// visibles y en marcha. Ver docs/PORT_AUDIT_GML.md, "Bloque 8".
 //
-// oSpider/Create_0: velo = 3, hp = 0 (las balas restan 4 -> muere de 1 tiro)
-#define SPIDER_SPEED        GML_SPEED(3)        // -> 0.72 px/f
-#define SPIDER_TURN         GML_TURN(3)         // -> 3.6 grados/f
+// Lo mismo con las velocidades de avance del GML (bloque 1): salen de
+// setSpeed por nivel (Entity_mlSpeed, ML_*_MAX_MU). Quedan de referencia:
+//   oSpider/Create_0:   velo = 3 (0,72 px/f, 3,6 grados/f), hp = 0
+//   oCabeza1/Create_0:  velo = random_range(5, 7.8) (1,20-1,875 px/f y
+//                       6-9,36 grados/f), hp = 4, stepdelay = 7 (6 f)
+//   oCabeza2b/Create_0: velo = 6.2 (1,49 px/f, 7,44 grados/f), hp = 2,
+//                       stepdelay = 6 (5 f)
+// El stepdelay tampoco: los eslabones siguen las migas de MonsterLite, cada
+// 8 px (ML_SNAKE_CRUMB_PX).
+//
+// La araña muere de cualquier impacto: en MonsterLite su hp (10) no se mira,
+// y en el GML era hp = 0 con las balas restando 4. Se queda el 0.
 #define SPIDER_HP           0
 
-// oCabeza1/Create_0: velo = random_range(5, 7.8), hp = 4, bodylength = 14,
-// stepdelay = 7. El giro usa el mismo valor que velo (turn_towards_direction
-// recibe velo como grados/frame), así que cada instancia gira a su ritmo.
-#define SNAKE1_SPEED_MIN    GML_SPEED(5.0)      // -> 1.20 px/f
-#define SNAKE1_SPEED_MAX    GML_SPEED(7.8)      // -> 1.875 px/f
-#define SNAKE1_TURN_MIN     GML_TURN(5.0)       // -> 6.0 grados/f
-#define SNAKE1_TURN_MAX     GML_TURN(7.8)       // -> 9.36 grados/f
-#define SNAKE1_HP           4                   // -> 5 impactos
+// Los dos gusanos del GML con su longitud (Q2): cabeza + 12 y + 10
+// eslabones. hp de MonsterLite para los dos (bloque 3, Q2): ML_SNAKE_HP.
+#define SNAKE1_HP           ML_SNAKE_HP         // GML: 4
 #define SNAKE1_PARTS        13                  // 9 oCorpo + oCu1 + oCu2 + oCabeza2 + cabeza
-#define SNAKE1_STEPDELAY    GML_FRAMES(7)       // -> 6 f
-
-// oCabeza2b/Create_0: velo = 6.2, hp = 2, bodylength = 12, stepdelay = 6
-#define SNAKE2_SPEED        GML_SPEED(6.2)      // -> 1.49 px/f
-#define SNAKE2_TURN         GML_TURN(6.2)       // -> 7.44 grados/f
-#define SNAKE2_HP           2                   // -> 3 impactos
+#define SNAKE2_HP           ML_SNAKE_HP         // GML: 2
 #define SNAKE2_PARTS        11                  // 7 oCorpo + oCu1 + oCu2 + oCabeza2 + cabeza
-#define SNAKE2_STEPDELAY    GML_FRAMES(6)       // -> 5 f
 
 #define SNAKE_MAX_PARTS     SNAKE1_PARTS
-
-// El historial necesita 13 partes x 6 frames + 1 = 79 posiciones, pero se
-// redondea a la potencia de 2 siguiente para indexarlo con una máscara: el
-// 68000 no tiene división, y el módulo se evaluaba tres veces por frame para
-// cada uno de los 52 eslabones en pantalla.
-#define SNAKE_MAX_HISTORY   128
-#define SNAKE_HIST_MASK     (SNAKE_MAX_HISTORY - 1)
 
 // scrInit: topes de población del original
 #define GML_MAX_SPIDERS     8
@@ -219,23 +190,87 @@
 #define ML_SNAKE_MAX_MU     4000
 
 // ---------------------------------------------------------------------------
+// IA de enemyMov (bloque 8 de docs/MONSTERLITE_GAP.md, S/enemyMov.cs)
+// ---------------------------------------------------------------------------
+
+// Giro: "rotation = Slerp(rotation, haciaElDestino, turningSpeed *
+// Time.deltaTime)" en FixedUpdate, o sea una FRACCIÓN t = turningSpeed *
+// 0,02 del ángulo que falta en cada frame (1:1 a 50 Hz). turningSpeed =
+// Random.Range(1, turningSpeedMax / 1.4) al nacer; turningSpeedMax [prefab]
+// es 8 en la araña y 10 en el gusano. La fracción va en Q12 (1/4096):
+//   mínimo 1 x 0,02 x 4096 = 81,92 -> 82
+//   máximo m / 1.4 x 0,02 x 4096 = m x 4096 / 70: araña 468,1 -> 468,
+//   gusano 585,1 -> 585.
+// El sorteo es entero sobre la fracción en Q12: error de redondeo de hasta
+// medio paso, 0,6 % en la más pequeña.
+#define ML_TURN_K_SHIFT     12
+#define ML_TURN_K_MIN       (((2 * 4096) + 50) / 100)       // 82
+#define ML_TURN_K_MAX(m)    ((((m) * 4096) + 35) / 70)
+#define ML_SPIDER_TURN_K_MAX ML_TURN_K_MAX(8)               // 468
+#define ML_SNAKE_TURN_K_MAX  ML_TURN_K_MAX(10)              // 585
+
+// Temporizador de re-sorteo: "timer -= 1" en Update (60 Hz), empieza en 200
+// [prefab] y al pasar de 0 re-sortea y vuelve a 30. En WANDER, move()
+// (FixedUpdate, 50 Hz) le resta además "level % 100" por tick. Se lleva en
+// quintos para que las dos cosas sean enteras: Update resta 1,2 por frame de
+// 50 Hz = 6 quintos; WANDER, 5 x (level % 100). 1000 / 6 -> 167 f la primera
+// vez (MonsterLite 167,5) y 150 / 6 -> 26 f después (25,8).
+#define ML_AI_TIMER_START   (200 * 5)
+#define ML_AI_TIMER_RESET   (30 * 5)
+#define ML_AI_TIMER_UPDATE  6
+#define ML_AI_TIMER_WANDER  5
+
+// Colisiones de los enemigos (bloque 8): esferas de MonsterLite, en décimas
+// de píxel. Araña SphereCollider 0.28 x escala 1.5 = 0,42 u = 8,4 px; cabeza
+// y eslabón (culobicho, culobicho2) 0.32 x 1.5 = 0,48 u = 9,6 px.
+#define ML_SPIDER_RADIUS_X10  84
+#define ML_SNAKE_RADIUS_X10   96
+// "Distancia < r" con distancias enteras al cuadrado: d^2 <= (r^2 - algo),
+// redondeado hacia abajo (como ML_PLAYER_R2). Y el alcance, ceil(r), para
+// descartar sin multiplicar.
+#define ML_R2_LT(rx10)        ((((rx10) * (rx10)) - 1) / 100)
+#define ML_REACH(rx10)        (((rx10) + 9) / 10)
+#define ML_SPIDER_R2          ML_R2_LT(ML_SPIDER_RADIUS_X10)                            // 70
+#define ML_SPIDER_REACH       ML_REACH(ML_SPIDER_RADIUS_X10)                            // 9
+#define ML_SNAKE_R2           ML_R2_LT(ML_SNAKE_RADIUS_X10)                             // 92
+#define ML_SNAKE_REACH        ML_REACH(ML_SNAKE_RADIUS_X10)                             // 10
+// Esfera contra esfera: se suman los radios. Nave 3,6 px.
+#define ML_PLAYER_SPIDER_R2   ML_R2_LT(36 + ML_SPIDER_RADIUS_X10)                       // 143 (12 px)
+#define ML_PLAYER_SPIDER_REACH ML_REACH(36 + ML_SPIDER_RADIUS_X10)                      // 12
+#define ML_PLAYER_SNAKE_R2    ML_R2_LT(36 + ML_SNAKE_RADIUS_X10)                        // 174 (13,2 px)
+#define ML_PLAYER_SNAKE_REACH ML_REACH(36 + ML_SNAKE_RADIUS_X10)                        // 14
+// Nave holo, 5,4 px (collideAndDie: sólo "arana" y "snake", la cabeza).
+#define ML_HOLO_SPIDER_R2     ML_R2_LT(54 + ML_SPIDER_RADIUS_X10)                       // 190 (13,8 px)
+#define ML_HOLO_SPIDER_REACH  ML_REACH(54 + ML_SPIDER_RADIUS_X10)                       // 14
+#define ML_HOLO_SNAKE_R2      ML_R2_LT(54 + ML_SNAKE_RADIUS_X10)                        // 224 (15 px)
+#define ML_HOLO_SNAKE_REACH   ML_REACH(54 + ML_SNAKE_RADIUS_X10)                        // 15
+// Bola CIRCULAR, esfera de 4 px (ML_CIRC_HALF).
+#define ML_BALL_SPIDER_R2     ML_R2_LT(40 + ML_SPIDER_RADIUS_X10)                       // 153 (12,4 px)
+#define ML_BALL_SPIDER_REACH  ML_REACH(40 + ML_SPIDER_RADIUS_X10)                       // 13
+#define ML_BALL_SNAKE_R2      ML_R2_LT(40 + ML_SNAKE_RADIUS_X10)                        // 184 (13,6 px)
+#define ML_BALL_SNAKE_REACH   ML_REACH(40 + ML_SNAKE_RADIUS_X10)                        // 14
+
+// Migas del gusano (S/headScr.cs): cada vez que la cabeza se aleja
+// segmentSpacing = 0,4 u [prefab] de la última miga se pone otra, y cada
+// eslabón salta a la suya. 8 px; la distancia se compara al cuadrado en
+// 1/64 de píxel.
+#define ML_SNAKE_CRUMB_PX     8
+#define ML_SNAKE_CRUMB_F2     ((s32)(ML_SNAKE_CRUMB_PX * 64) * (ML_SNAKE_CRUMB_PX * 64))
+
+// ---------------------------------------------------------------------------
 // Jugador de MonsterLite (bloque 2 de docs/MONSTERLITE_GAP.md)
 // ---------------------------------------------------------------------------
 
-// playerMovement.move (S/playerMovement.cs:35-65), rama de teclas: speed =
-// 0.2 u por tick de FixedUpdate [prefab player] en cada eje pulsado, sin
-// inercia. 0.2 u x 20 px = 4 px/f, exacto en fix16. El original suma los dos
-// ejes sin normalizar (5,66 px/f en diagonal); por decisión del usuario (Q7)
-// el port normaliza: en diagonal cada eje va a 4 / sqrt(2) = 2,8284 px/f,
-// que en fix16 son 181/64 = 2,8281 (velocidad total 3,9996 px/f, -0,01 %).
-// Constantes, sin raíces en ejecución.
-#define ML_PLAYER_SPEED       FIX16(4)
-#define ML_PLAYER_SPEED_DIAG  FIX16R(4.0 * 0.70710678118654752)
+// Movimiento de la nave: el del GML (decisión del usuario, 2026-11-16, que
+// sustituye a Q7 y al wrap sin margen del bloque 2). oPlayer/Step_0: cada
+// tecla suma acc = 6 a su eje (oPlayer/Create_0), sin inercia y sin
+// normalizar: en diagonal va un 41 % más rápido, como en el original.
+// 6 x 0,2 x 1,2 = 1,44 px/f -> 92/64 = 1,4375 en fix16 (-0,17 %).
+#define PLAYER_ACC            GML_SPEED(6)
 
-// playerMovement.move, "BOUNDARIES" (S/playerMovement.cs:129-146): wrap
-// toroidal en los bordes exactos de la cámara (globales.minX/maxX/minY/maxY,
-// la mitad de la vista a cada lado), sin margen.
-#define PLAYER_WRAP_OFFSET    0
+// stPlayerMovement(): wrap en los cuatro bordes con margen offSet = 15
+// (oPlayer/Create_0) -> 3 px.
+#define PLAYER_WRAP_OFFSET    GML_LEN(15)
 
 // SphereCollider del prefab player [prefab]: radio 0.18 u, escala 1 ->
 // 3,6 px. Las distancias de colisión son enteras (píxeles), así que la
@@ -245,29 +280,24 @@
 #define ML_PLAYER_R2          (((ML_PLAYER_RADIUS_X10 * ML_PLAYER_RADIUS_X10) - 1) / 100)  // 12
 #define ML_PLAYER_REACH       ((ML_PLAYER_RADIUS_X10 + 9) / 10)                         // 4: ceil(3,6)
 
-// AgujerosPadre [prefab]: seis agujeros hijos en posiciones locales de 1 o
-// 2 u, en hexágono (ver src/hole.c). Por decisión del usuario (Q6) el
-// hexágono va CENTRADO en pantalla, no 2,57 u por debajo del centro como en
-// el dispositivo apaisado (posH, S/gameControl.cs:167-169).
-#define ML_HOLES_CX           (PLAYFIELD_W / 2)  // 160
-#define ML_HOLES_CY           (PLAYFIELD_H / 2)  // 120
-#define ML_UNIT_PX            20                 // 1 u de mundo
+// Aparición de la nave y agujeros: por decisión del usuario al cerrar el
+// bloque 2 (docs/MONSTERLITE_DECISIONES.md) vuelven a los del port antes
+// del bloque 2, no a los de MonsterLite. Los agujeros son el anillo de seis
+// de src/hole.c, alrededor del centro del room, y la nave nace en el centro
+// de la pantalla, como startGame() del GML:
+//   instance_create(global.game_width*0.5, global.game_height*0.5, oPlayer)
+// (MonsterLite la pone en highPos, 5,14 u por encima del hexágono:
+// S/gameControl.cs:156.)
+#define PLAYER_SPAWN_X        (PLAYFIELD_W / 2)  // 160
+#define PLAYER_SPAWN_Y        (PLAYFIELD_H / 2)  // 120
 
-// La nave nace en highPos = ScreenToWorldPoint(W / 2, H / 1.4)
-// (S/gameControl.cs:156) y el hexágono está en posH = (W / 2, H - H / 1.4):
-// en apaisado la nave queda (2 / 1.4 - 1) x 12 u = 5,14 u = 102,9 px por
-// ENCIMA del centro del hexágono. Q6: la misma posición respecto al
-// hexágono, con el hexágono centrado -> (160, 120 - 102,9) = (160, 17).
-#define ML_PLAYER_SPAWN_ABOVE ((s16)((((2.0 / 1.4) - 1.0) * PLAYFIELD_H) + 0.5))   // 103
-#define ML_PLAYER_SPAWN_X     ML_HOLES_CX
-#define ML_PLAYER_SPAWN_Y     (ML_HOLES_CY - ML_PLAYER_SPAWN_ABOVE)                // 17
-
-// El tiempo sólo corre con B pulsado (Q8). En MonsterLite, en partida:
+// El tiempo sólo corre con A, B o C pulsado (Q8). En MonsterLite, en partida:
 //   if (Input.touchCount == 0 && HUD.counter >= 60) Time.timeScale = 0;
 //   if (Input.touchCount > 0) Time.timeScale = 1;
 // (S/gameControl.cs:265-301). Sin dedo en pantalla, el tiempo se para; el
-// port cambia el dedo por mantener B (ver src/game.c, timeStopped).
-#define ML_TIME_BUTTON        BUTTON_B
+// port cambia el dedo por mantener B (ver src/game.c, timeStopped). A y C
+// hacen lo mismo que B (decisión del usuario, 2026-11-16).
+#define ML_TIME_BUTTON        (BUTTON_A | BUTTON_B | BUTTON_C)
 // HUD.counter vuelve a 0 fuera de partida y sube una vez por llamada a
 // OnGUI mientras sale "ARENA!", hasta 60 (S/HUD.cs:163-166, 470-472):
 // mientras tanto no se congela. Unity llama a OnGUI al menos dos veces por
@@ -276,6 +306,187 @@
 // funcionamiento de Unity, no medido: con una sola llamada por frame serían
 // 50 f (ver docs/MONSTERLITE_GAP.md §2.4).
 #define ML_FREEZE_GRACE_F     25
+
+// ---------------------------------------------------------------------------
+// Armas de MonsterLite (bloque 3 de docs/MONSTERLITE_GAP.md, §2.5)
+//
+// S/disparo.cs:32-160 desde FixedUpdate (50 Hz, 1:1 con la Mega Drive):
+// mientras shootTime > 1 baja 1 por tick; cuando llega a 1 dispara y lo pone
+// a la cadencia, así que el periodo es la cadencia en frames. Sólo cuenta y
+// dispara si hay un enemigo (getClosest). Valores del prefab player.
+// ---------------------------------------------------------------------------
+#define ML_SHOT_FIRST_F       4     // shootTime inicial
+#define ML_SHOT_NORMAL_F      8     // shotTimeNormal: la bala fina, sin munición
+#define ML_SHOT_WBLOCK_F      4     // shotTimewBock
+#define ML_SHOT_LASER_F       5     // shotTimeLaser
+#define ML_SHOT_TWAY_F        3     // shotTimeTWay
+#define ML_SHOT_MOIRE_F       2     // shotTimeMoire
+// CIRCULAR usa shotTimeTWay (3) en el original, no shotTimeCircular (4), que
+// no se lee nunca. Q12: se corrige y usa la suya.
+#define ML_SHOT_CIRCULAR_F    4
+
+// AddForce(right · shotForce 150) a una masa de 0.1: 30 u/s -> 12 px/f,
+// exacto en fix16. Bullet y BulletThin llevan una caja de 0.8 u -> 16x16 px
+// centrada, y se destruyen al salir de pantalla (bulletScrKillSprite).
+#define ML_BULLET_SPEED       FIX16(12)
+#define ML_BULLET_HALF        8
+#define ML_BULLET_BOX         (2 * ML_BULLET_HALF)
+
+// TWAY: tres Bullet a -30, 0 y +30 grados del rumbo.
+#define ML_TWAY_SPREAD        FIX16(30)
+
+// WBLOCK: la bala nace desplazada "distanceToGun" =
+// GetComponentInChildren<SpriteRenderer>().sprite.bounds.size.x / 2, llamado
+// desde disparo, que está en la NAVE: es el sprite de la nave (hijo "nave" de
+// player.prefab, nave.png, 58x38 px a 100 px por unidad; sprite.bounds no
+// lleva la escala 1.3 del hijo) -> 0,29 u -> 5,8 px. Leído con UnityPy. En
+// el original el desplazamiento va en X del mundo, sin rotar; Q12: se
+// corrige y va hacia donde apunta la nave.
+#define ML_WBLOCK_GUN_PX      6
+
+// Daño a la cabeza del gusano (enemyLife): decreaseHP -1 con la bala fina,
+// decreaseDoubleHP -3 con la gorda y las bolas. Y el orden importa: primero
+// mira si hp < 0 y SÓLO ENTONCES mata; si no, resta. Con hp 4 la fina mata
+// al 6.º impacto y la gorda al 3.º. La gorda que no mata no se destruye:
+// atraviesa (S/bulletScript.cs:67-85). La araña muere de cualquier impacto.
+#define ML_SNAKE_HP           4     // culobicho [prefab]
+#define ML_DMG_THIN           1
+#define ML_DMG_FAT            3
+
+// LASER y MOIRE: impacto instantáneo (S/RaycastScr.cs). Un Physics.Raycast
+// por frame desde la nave en la dirección de apuntado, sin distancia
+// máxima, contra el primer collider de la línea (triggers incluidos). El
+// RaycastObj vive 30 frames de Update (LASER) u 8 (MOIRE): 25 y 7 f. El haz
+// que se ve (Laser.prefab, LineRenderer) vive timer 2 frames de Update
+// (LASER) o 8 (MOIRE): 2 y 7 f.
+#define ML_LASER_RAY_F        25
+#define ML_MOIRE_RAY_F        7
+#define ML_LASER_BEAM_F       2
+#define ML_MOIRE_BEAM_F       7
+
+// Radios del rayo contra lo que tapa la línea, en décimas de píxel. Son los
+// collider de MonsterLite (§2.5-2.7): araña 0.42 u, cabeza y eslabón 0.48 u,
+// agujero 0.88 u, paquete caja de 1 u (se toma la mitad del lado), balas en
+// vuelo caja de 0.8 u (ídem).
+// (Araña, cabeza y eslabón: ML_SPIDER_RADIUS_X10 y ML_SNAKE_RADIUS_X10, que
+// desde el bloque 8 son también los de todas sus colisiones.)
+#define ML_RAY_R_HOLE_X10     176
+#define ML_RAY_R_PACK_X10     100
+#define ML_RAY_R_BULLET_X10   80
+// En 1/64 de píxel, que es como sale la distancia perpendicular del rayo.
+#define ML_X10_TO_F16(r)      ((s16)((((r) * 64) + 5) / 10))
+
+// CIRCULAR (S/circCont.cs, S/circularScr.cs): bolas a len = 1 u (20 px) de
+// la nave; las que no se sueltan orbitan 2 grados por frame de Update
+// (2,4/f); las sueltas van al enemigo más cercano a 1 u por frame de Update
+// (24 px/f). Esfera de 0.2 u -> 4 px. En el original el bucle es
+// "i <= 360" con paso 120 y salen 4 bolas, dos superpuestas; Q12: 3.
+#define ML_CIRC_BALLS         3
+#define ML_CIRC_RADIUS        20
+#define ML_CIRC_SPIN          FIX16R(2.4)
+#define ML_CIRC_SPEED         24
+#define ML_CIRC_HALF          4
+
+// ---------------------------------------------------------------------------
+// Lo que suelta un enemigo (bloque 4 de MonsterLite, §2.7 y §2.9)
+// ---------------------------------------------------------------------------
+// leavePow (bulletScript, bulletThinSrc, RaycastScr, circularScr):
+// Random.Range(0, 2), 50 % moneda y 50 % paquete por baja con disparo. La
+// bola CIRCULAR contra una araña suelta siempre paquete.
+//
+// Paquete y moneda: lifeTime 200 frames de Update [prefab] -> 167 f. Al
+// recoger el paquete (triggerAnim) sube aumento = 0,1 u por frame de Update
+// (2,4 px/f) y su vida baja 30 más por frame de Update: aquí, con la vida en
+// frames de 50 Hz, 31 por frame (los dos lados escalan igual). Caja de 0,5 u
+// a escala 2 = 1 u -> 20x20 px centrada.
+#define ML_ITEM_LIFE_F        167
+#define ML_ITEM_LIFT_DEC      31
+#define ML_PACK_RISE          FIX16R(2.4)
+#define ML_ITEM_HALF          10
+#define ML_ITEM_BOX           (2 * ML_ITEM_HALF)
+
+// Moneda recogida (playerMovement.moveCoin): MoveTowards hacia
+// ScreenToWorldPoint(W / 2, -H), una pantalla por debajo del centro de abajo,
+// a 8 u/s · deltaTime: 2,67 px por frame de Update -> 3,2 px/f. Como va con
+// deltaTime, con el tiempo parado no se mueve; la caducidad, que cuenta
+// frames de Update, sí sigue.
+#define ML_COIN_FLY_SPEED     FIX16R(3.2)
+#define ML_COIN_TARGET_X      (PLAYFIELD_W / 2)
+#define ML_COIN_TARGET_Y      (2 * PLAYFIELD_H)
+
+// coinAnim: 6 frames a 12 por segundo -> un frame cada 50 / 12 = 4,17 f.
+#define ML_COIN_FRAMES        6
+#define ML_COIN_FPS           12
+
+// Coin.getCoinType: hasta el nivel 10, 50 o 60; desde el 11, 50, 60, 150,
+// 180 o 100, equiprobables.
+#define ML_COIN_LEVEL_HIGH    10
+
+// Monedas a la vez. MonsterLite no las limita; con una baja cada pocos
+// frames, 50 % de moneda y 167 f de vida, 16 dan para el caso peor medido
+// (~28 bajas en 600 f con la arena llena: ~4 monedas vivas).
+#define MAX_COINS             16
+
+// ---------------------------------------------------------------------------
+// Bloque 7: los power-ups de MonsterLite (§2.7 de docs/MONSTERLITE_GAP.md)
+// ---------------------------------------------------------------------------
+// Oleadas (S/gameControl.cs:477-571): la 3 pone una bomba si
+// Random.Range(0, 6) == 1, la 4 unos rayos si Random.Range(0, 7) == 1, y la
+// 6, 16, 19, 20 y 21 una nave holo si hay menos de maxNaveProxy (10, valor de
+// la escena). Las tres en globales.getRandomPos(): x e y al azar entre el 10
+// y el 90 % de la pantalla.
+#define ML_BOMB_CHANCE        6
+#define ML_RAYS_CHANCE        7
+#define ML_HOLO_MAX           10
+#define ML_RANDPOS_X0         (PLAYFIELD_W / 10)                // 32
+#define ML_RANDPOS_W          ((PLAYFIELD_W * 8) / 10)          // 256
+#define ML_RANDPOS_Y0         (PLAYFIELD_H / 10)                // 24
+#define ML_RANDPOS_H          ((PLAYFIELD_H * 8) / 10)          // 192
+
+// La bomba y los rayos no caducan y MonsterLite no los limita. Como ocupan
+// el pool de lo que hay en el suelo (que es también el de los paquetes),
+// aquí se topan: si ya hay ML_GROUND_POW_MAX entre los dos, la oleada no
+// crea otro. Invención del port (ver docs/PORT_AUDIT_GML.md, bloque 7).
+#define ML_GROUND_POW_MAX     6
+
+// Cajas: Bomba.prefab, BoxCollider de 0,7 u (14 px); RayosBomba.prefab, de
+// 1 u (20 px). La nave las toca con su esfera de 3,6 px.
+#define ML_BOMB_HALF          7
+#define ML_RAYS_HALF          10
+
+// playerMovement.OnTriggerEnter, bomba y rayos: System.Threading.Thread.Sleep
+// (100) congela el juego entero 100 ms (Q17): 5 frames.
+#define ML_POW_FREEZE_F       5
+
+// triggerSplashBomb.timerRays = 30 [prefab player]. RayoScr.Update hace
+// "timer--; if (timer < 0)": dispara en el Update 31, a 60 Hz -> 25,8 f.
+#define ML_RAYS_TIMER_F       26
+// RayoScr: cada vértice intermedio de la línea con ruido Random.Range(-0.4,
+// 0.4) u = +-8 px.
+#define ML_RAY_NOISE          8
+
+// La nave holo (naveProxy.prefab). Inactiva gira transform.Rotate(1 grado)
+// por Update: 1,2 grados/f. Activa dispara BulletThin con shotForce 80 (16
+// u/s = 6,4 px/f) cada shotTimeNormal 40 Update (33 f), el primero con
+// shootTime 20 (17 f). Su esfera es de radio 0,18 a escala 1,5: 5,4 px.
+#define ML_HOLO_SPIN          FIX16R(1.2)
+#define ML_HOLO_FIRST_F       17
+#define ML_HOLO_SHOT_F        33
+#define ML_HOLO_BULLET_SPEED  FIX16R(6.4)
+#define ML_HOLO_RADIUS_X10    54
+#define ML_HOLO_R2            ((ML_HOLO_RADIUS_X10 * ML_HOLO_RADIUS_X10) / 100)   // 29
+#define ML_HOLO_REACH         ((ML_HOLO_RADIUS_X10 + 9) / 10)                     // 6
+// La nave la activa al tocarla: esfera contra esfera, 3,6 + 5,4 = 9 px.
+#define ML_HOLO_TOUCH_R       ((36 + ML_HOLO_RADIUS_X10) / 10)                                // 9
+#define ML_HOLO_TOUCH_R2      (((36 + ML_HOLO_RADIUS_X10) * (36 + ML_HOLO_RADIUS_X10)) / 100) // 81
+
+// Munición por paquete (paqueteScr [prefab]). PIVOT y PARA no existen en
+// MonsterLite: siguen con la del GML (AMMO_PIVOT, AMMO_PARA).
+#define ML_AMMO_WBLOCK        10
+#define ML_AMMO_LASER         4
+#define ML_AMMO_TWAY          10
+#define ML_AMMO_CIRCULAR      4
+#define ML_AMMO_MOIRE         3
 
 // Umbrales de desbloqueo por kills de récord (oWeaponBox/Create_0 +
 // stCheckWeapon). NO son los del .yyp de surfize_changes (1/2/3/4, valores de
@@ -286,14 +497,10 @@
 #define CIRCULAR_ENABLED    80
 #define TRI_ENABLED         100
 
-// Munición por paquete según arma (oPlayer/Collision_oPaquete)
-#define AMMO_WBLOCK         10
-#define AMMO_LASER          4
-#define AMMO_3WAY           10
+// Munición por paquete de las dos armas del GML que MonsterLite no tiene
+// (oPlayer/Collision_oPaquete). Las demás, ML_AMMO_*.
 #define AMMO_PIVOT          5
 #define AMMO_PARA           8
-#define AMMO_BOMBA          1
-#define AMMO_RAY            1
 
 // generaPaquete
 #define PAQUETES_16         16
@@ -323,41 +530,11 @@
 #define PLAYER_BOX_W    GML_LEN(37 - 1)         // 7
 #define PLAYER_BOX_H    GML_LEN(55 - 0)         // 11
 
-// sBulletThin: 20x28, origen (10,14), bbox L0 R19 T0 B27 (rectángulo)
-#define BULLET_BOX_OX   GML_LEN(0 - 10)         // -2
-#define BULLET_BOX_OY   GML_LEN(0 - 14)         // -3
-#define BULLET_BOX_W    GML_LEN(19 - 0)         // 4
-#define BULLET_BOX_H    GML_LEN(27 - 0)         // 5
-
-// sprite185 (araña): 64x64, origen (30,40), bbox L0 R62 T2 B63
-#define SPIDER_BOX_OX   GML_LEN(0 - 30)         // -6
-#define SPIDER_BOX_OY   GML_LEN(2 - 40)         // -8
-#define SPIDER_BOX_W    GML_LEN(62 - 0)         // 12
-#define SPIDER_BOX_H    GML_LEN(63 - 2)         // 12
-
-// spr_rtype_outslay_head (cabeza): 64x64, origen (32,32), bbox L2 R63 T7 B60
-#define SNAKE_HEAD_BOX_OX GML_LEN(2 - 32)       // -6
-#define SNAKE_HEAD_BOX_OY GML_LEN(7 - 32)       // -5
-#define SNAKE_HEAD_BOX_W  GML_LEN(63 - 2)       // 12
-#define SNAKE_HEAD_BOX_H  GML_LEN(60 - 7)       // 11
-
-// spr_rtype_outslay_body (oCorpo): 51x64, origen (26,31), bbox L0 R50 T4 B63
-#define SNAKE_BODY_BOX_OX GML_LEN(0 - 26)       // -5
-#define SNAKE_BODY_BOX_OY GML_LEN(4 - 31)       // -5
-#define SNAKE_BODY_BOX_W  GML_LEN(50 - 0)       // 10
-#define SNAKE_BODY_BOX_H  GML_LEN(63 - 4)       // 12
-
-// sprAgujero: 197x197, origen (99,85), bbox L88 R102 T72 B83 (elipse). La
-// máscara del agujero es diminuta comparada con el dibujo: 15x12 px del
-// room, no el disco entero. De ahí que el enemigo que vaga sólo se
-// teletransporte al pasar casi por el centro del agujero.
-#define HOLE_BOX_OX     GML_LEN(88 - 99)        // -2
-#define HOLE_BOX_OY     GML_LEN(72 - 85)        // -3
-#define HOLE_BOX_W      GML_LEN(102 - 88)       // 3
-#define HOLE_BOX_H      GML_LEN(83 - 72)        // 2
-
-// oPlayer/Create_0: controlTime = 30 (primer disparo tras 30 frames)
-#define SHOOT_INT_FIRST   GML_FRAMES(30)        // -> 25 f
+// Las máscaras del GML de la araña (sprite185, caja de 12x12), la cabeza
+// (12x11), el eslabón (10x12) y el agujero (3x2, la que usaba el
+// teletransporte del estado de vagar) ya no se usan desde el bloque 8 de
+// MonsterLite: los enemigos chocan con sus esferas (ML_SPIDER_RADIUS_X10,
+// ML_SNAKE_RADIUS_X10). Ver docs/PORT_AUDIT_GML.md, "Bloque 8".
 
 // oPivot/Create_0: 3 satélites (for h=1; h<360; h+=120) a dia = 100 px del
 // room, que giran 2 grados por frame de input (t += 2) y se mueven con el
@@ -368,34 +545,14 @@
 #define PIVOT_SPIN          GML_TURN(2)         // -> 2.4 grados/f
 #define PIVOT_HOME_SPEED    GML_SPEED(74)       // tope del random(74)
 
-// oTri/Create_0 y Step_0: réplica estática que dispara sola.
-#define TRI_SHOOT_AMMO      GML_FRAMES(24)      // -> 20 f
-#define TRI_SHOOT_FREE      GML_FRAMES(62)      // -> 52 f
-// El original NO limita las réplicas: el "< 2" de generaPaquete es el tope de
-// POWER-UPS en el suelo, no de oTri, y oPlayer/Collision_oNaveReplicaPowUp
-// crea uno cada vez sin mirar cuántos hay. En las capturas del juego
-// publicado se ven cuatro a la vez. Aquí el tope lo pone el pool de
-// proyectiles, que comparten.
-#define MAX_TRI             4
+// oTri (la réplica del GML) lo sustituye la nave holo de MonsterLite en el
+// bloque 7: ver ML_HOLO_*.
 
 // Vidas y mechas (alarm de cada objeto)
 #define PARA_LIFE           GML_FRAMES(6)       // oBulletPara/Create: alarm = 6
 #define BOMB_FUSE           GML_FRAMES(60)      // oBomba/Create: alarm = 60
-#define RAY_FUSE            GML_FRAMES(30)      // oRay/Create: alarm = 30
 
 // Máscaras de los proyectiles (bbox del sprite respecto al origen, x0.2)
-#define WBLOCK_BOX_OX       GML_LEN(0 - 45)     // sBullet 96x116, origen (45,4)
-#define WBLOCK_BOX_OY       GML_LEN(0 - 4)
-#define WBLOCK_BOX_W        GML_LEN(95)
-#define WBLOCK_BOX_H        GML_LEN(115)
-#define THREEW_BOX_OX       GML_LEN(0 - 12)     // spr3way 24x24, origen (12,12)
-#define THREEW_BOX_OY       GML_LEN(0 - 12)
-#define THREEW_BOX_W        GML_LEN(23)
-#define THREEW_BOX_H        GML_LEN(23)
-#define LASER_BOX_OX        GML_LEN(0 - 1)      // sprLaser 6x32, origen (1,30)
-#define LASER_BOX_OY        GML_LEN(0 - 30)
-#define LASER_BOX_W         GML_LEN(5)
-#define LASER_BOX_H         GML_LEN(31)
 #define PARA_BOX_OX         GML_LEN(0 - 4)      // sBulletPara 10x28, origen (4,17)
 #define PARA_BOX_OY         GML_LEN(0 - 17)
 #define PARA_BOX_W          GML_LEN(9)
@@ -491,10 +648,19 @@
 #define BEAM_START_OFF      GML_LEN(-25)        // hix = y - 25
 
 // Pool único para todo lo que lanza el jugador (balas de cualquier arma,
-// segmentos de láser, bombas y rayos): sólo hay un arma activa a la vez, así
-// que comparten objetos. 14 + 4 explosiones + 61 de jugador y enemigos = 79
-// de los 80 objetos Sprite de SGDK.
-#define MAX_PROJECTILES     14
+// bolas CIRCULAR, satélites del PIVOT, bombas, rayos y réplicas): sólo hay un
+// arma activa a la vez, así que comparten objetos.
+//
+// Bloque 3 de MonsterLite (§2.5): las balas viven sólo en pantalla, a
+// 12 px/f. El TWAY saca 3 cada 3 f y una bala cruza como mucho ~34 f (la
+// diagonal desde una esquina): hasta ~35 vivas con la nave en una esquina,
+// ~18 desde el centro. CIRCULAR saca 3 bolas cada 4 f que llegan a su
+// objetivo en pocos frames: 4-8 lo normal, ~20 en el peor caso. Era 14 (el
+// GML). Ver la medición en docs/PORT_AUDIT_GML.md: si no caben, se pierde la
+// bala más nueva del TWAY, que no dispara si el pool está lleno.
+// Bloque 7: +10 de las naves holo, que viven en este pool, y +10 para sus
+// balas (una cada 33 f a 6,4 px/f: como mucho dos vivas por nave).
+#define MAX_PROJECTILES     56
 // morteGusano() crea una explosión por eslabón (13 en el gusano largo), así
 // que el pool tiene que dar para una cascada; con 8 se ven las ocho últimas,
 // que es lo que llena la pantalla.

@@ -1,3 +1,4 @@
+#include "logo.h"
 #include "gfxdebug.h"
 #include <genesis.h>
 #include "resources.h"
@@ -49,6 +50,13 @@ int main(bool hardReset)
     Fast_init();
     Audio_init();
     JOY_init();
+
+#if !(PORT_STRESS || PORT_BENCH || PORT_PROF)
+    // logo.unity de MonsterLite, antes de repartir la VRAM (ver inc/logo.h).
+    // El arnés de medida se lo salta para que sus frames sigan siendo los
+    // mismos.
+    Logo_show();
+#endif
 
     // La semilla por defecto es fija: sin ella cada partida repetiría la
     // misma secuencia de agujeros y velocidades de gusano.

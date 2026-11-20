@@ -29,6 +29,7 @@ static u32 shownScore;
 static u32 shownLast;
 static u16 shownLevel;
 static u32 shownFactor;
+static u32 shownCoins;
 
 // Índice del glifo, o 0xFF si el carácter no está en la hoja (espacio).
 static u8 glyphOf(char c)
@@ -108,6 +109,15 @@ static void clearBig(void)
 #define HUD_LAST_COL     22
 #define HUD_NUM_LEN      7
 
+// COINS (bloque 4 de MonsterLite, provisional hasta el bloque 9). En
+// MonsterLite va abajo, empezando en el centro de la pantalla (S/HUD.cs:369-
+// 384: x = W / 2, en la última línea), con el saldo total. Aquí, en la
+// última fila con la fuente del sistema. En NTSC esa fila no se ve (la
+// consola sólo muestra 224 líneas, ver PLAYFIELD_H).
+#define HUD_ROW_COINS    ((PLAYFIELD_H / 8) - 1)               // fila 29
+#define HUD_COINS_COL    (HUD_COLS / 2)                        // columna 20
+#define HUD_COINS_MAX    9999999UL
+
 // v en n cifras rellenas con espacios por la izquierda. Sin sprintf: es u32
 // y corre sólo cuando el valor cambia.
 static void padNum(char *dst, u32 v, u16 n)
@@ -155,6 +165,7 @@ void HUD_init(void)
     shownLast = 0xFFFFFFFFUL;
     shownLevel = 0xFFFF;
     shownFactor = 0;
+    shownCoins = 0xFFFFFFFFUL;
 
     clearBig();
     VDP_clearTextLine(HUD_ROW_LAST);
@@ -168,6 +179,9 @@ void HUD_init(void)
     VDP_drawText("UP", HUD_UP_COL - 3, HUD_ROW_LAST);
     VDP_drawText("LAST", HUD_LAST_COL - 5, HUD_ROW_LAST);
     VDP_drawText("SCORE", HUD_COLS - 5, HUD_ROW_LAST);
+
+    VDP_clearTextLine(HUD_ROW_COINS);
+    VDP_drawText("COINS", HUD_COINS_COL, HUD_ROW_COINS);
 }
 
 void HUD_update(void)
@@ -204,6 +218,13 @@ void HUD_update(void)
         VDP_drawText(buf, HUD_LV_COL, HUD_ROW_LAST);
         leftNum(buf, (up > HUD_SCORE_MAX) ? HUD_SCORE_MAX : up, HUD_NUM_LEN);
         VDP_drawText(buf, HUD_UP_COL, HUD_ROW_LAST);
+    }
+
+    if (g_coins != shownCoins)
+    {
+        shownCoins = g_coins;
+        leftNum(buf, (g_coins > HUD_COINS_MAX) ? HUD_COINS_MAX : g_coins, HUD_NUM_LEN);
+        VDP_drawText(buf, HUD_COINS_COL + 6, HUD_ROW_COINS);
     }
 
     if (g_lastScore != shownLast)

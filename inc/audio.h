@@ -38,6 +38,12 @@ typedef enum
     SFX_COUNT
 } SfxId;
 
+// Sonido y música apagables desde la tienda (bloque 5). Con el sonido
+// apagado no suena ningún efecto, voz ni tick; con la música apagada no
+// suena la del menú.
+extern bool g_soundOn;
+extern bool g_musicOn;
+
 void Audio_init(void);
 void Audio_sfx(u8 id);
 

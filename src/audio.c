@@ -10,6 +10,12 @@ typedef struct
 static Sample samples[SFX_COUNT];
 static u8 nextChannel;
 
+// Interruptores de la tienda (AudioToggle y musicToggle de MonsterLite,
+// S/globales.cs:457-494). Encendidos al arrancar; se guardarán en SRAM en el
+// bloque 6.
+bool g_soundOn = TRUE;
+bool g_musicOn = TRUE;
+
 void Audio_init(void)
 {
     XGM2_loadDriver(TRUE);
@@ -34,7 +40,7 @@ void Audio_init(void)
 
 void Audio_sfx(u8 id)
 {
-    if (id >= SFX_COUNT) return;
+    if (!g_soundOn || (id >= SFX_COUNT)) return;
 
     // Canales 2 y 3 en alternancia: el 1 es para la música del menú.
     XGM2_playPCM(samples[id].data, samples[id].len,
@@ -48,7 +54,7 @@ void Audio_speech(u16 weaponIndex)
     static const u32 voiceLen[5] = { sizeof(spk0), sizeof(spk1), sizeof(spk2),
                                      sizeof(spk3), sizeof(spk4) };
 
-    if (weaponIndex >= 5) return;
+    if (!g_soundOn || (weaponIndex >= 5)) return;
 
     // La voz va al canal 3 para no cortar la música del menú (canal 1).
     XGM2_playPCM(voice[weaponIndex], voiceLen[weaponIndex], SOUND_PCM_CH3);
@@ -56,7 +62,7 @@ void Audio_speech(u16 weaponIndex)
 
 void Audio_menuMusic(bool on)
 {
-    if (on)
+    if (on && g_musicOn)
     {
         // El original la lanza una vez al entrar en el menú, sin bucle.
         XGM2_playPCMEx(musMenu, sizeof(musMenu), SOUND_PCM_CH1, 6, FALSE, FALSE);
@@ -81,6 +87,8 @@ static u8 tickStep;
 
 void Audio_tick(void)
 {
+    if (!g_soundOn) return;
+
     PSG_setNoise(PSG_NOISE_TYPE_WHITE, PSG_NOISE_FREQ_CLOCK2);
     PSG_setEnvelope(TICK_CH, tickEnv[0]);
     tickStep = 1;

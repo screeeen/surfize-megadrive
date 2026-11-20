@@ -9,15 +9,21 @@
 #include "snake.h"
 #include "projectile.h"
 #include "hole.h"
+#include "weapon.h"
+#include "mlpow.h"
 
 #define BEAM_SPR_OFF    (-(BEAM_CELL / 2))
 #define DOT_SPR_OFF     (-(DOT_CELL / 2))
-#define MAX_LINES       MAX_TRI
+#define MAX_LINES       ML_HOLO_MAX
+#define MAX_RAY_DOTS    (MLPOW_MAX_RAYS * BEAM_RAY_DOTS)
 
 static MDSpr *segSprite[BEAM_SEGMENTS];
 static MDSpr *lineDot[MAX_LINES * BEAM_LINE_DOTS];
-static MDSpr *rayDot[BEAM_RAY_LINES * BEAM_RAY_DOTS];
+static MDSpr *rayDot[MAX_RAY_DOTS];
 static u16    beamTile[8][BEAM_COLORS];
+// Cuántos puntos de líneas y de rayos se enseñaron el frame anterior: sólo
+// hay que esconder esos, no el pool entero cada frame.
+static u16    lineShown, rayShown;
 static u16    dotTile[DOT_COLORS];
 
 void Beam_init(void)
@@ -49,7 +55,7 @@ void Beam_initDots(void)
     for (i = 0; i < (MAX_LINES * BEAM_LINE_DOTS); i++)
         lineDot[i] = VSpr_add(&dotSprite, PAL1, dotTile[0]);
 
-    for (i = 0; i < (BEAM_RAY_LINES * BEAM_RAY_DOTS); i++)
+    for (i = 0; i < MAX_RAY_DOTS; i++)
         rayDot[i] = VSpr_add(&dotSprite, PAL1, dotTile[0]);
 }
 
@@ -59,7 +65,9 @@ void Beam_clear(void)
 
     for (i = 0; i < BEAM_SEGMENTS; i++) sprHide(segSprite[i]);
     for (i = 0; i < (MAX_LINES * BEAM_LINE_DOTS); i++) sprHide(lineDot[i]);
-    for (i = 0; i < (BEAM_RAY_LINES * BEAM_RAY_DOTS); i++) sprHide(rayDot[i]);
+    for (i = 0; i < MAX_RAY_DOTS; i++) sprHide(rayDot[i]);
+    lineShown = 0;
+    rayShown = 0;
 }
 
 static void hideBeam(void)
@@ -82,7 +90,7 @@ static void updateBeam(u16 weaponIndex, u16 ammo, fix16 px, fix16 py, fix16 angl
 
     // script0(1) sólo crea object1 con munición, y case 4 sólo crea object0
     // con el arma PARA puesta.
-    if ((weaponIndex != 4) || (ammo == 0))
+    if ((weaponIndex != WPN_PARA) || (ammo == 0))
     {
         hideBeam();
         return;
@@ -157,43 +165,58 @@ static void updateLines(fix16 px, fix16 py)
         }
     }
 
-    while (slot < (MAX_LINES * BEAM_LINE_DOTS)) sprHide(lineDot[slot++]);
+    {
+        const u16 shown = slot;
+
+        while (slot < lineShown) sprHide(lineDot[slot++]);
+        lineShown = shown;
+    }
 }
 
-// oRay/Draw_0: mientras arde la mecha, tres descargas del jugador a cada uno
-// de los cinco agujeros, todas del mismo color y cambiándolo cada frame entre
-// azul, plata y amarillo. Aquí una por agujero, de puntos.
+// RayoScr.Update de MonsterLite: la línea de la nave a cada objetivo, con
+// ruido y un color al azar por rayo y frame (aquí azul, plata o amarillo, los
+// de dot.png). Los vértices 2, 4 y 6 de los 9.
 static void updateRays(fix16 px, fix16 py)
 {
-    u16 slot = 0;
+    u16 slot = 0, n, r, d;
+    const MLRay *rays = MLPow_rays(&n);
+    const s16 ox = F2I(px);
+    const s16 oy = F2I(py);
 
-    if (Proj_rayBurning())
+    for (r = 0; r < n; r++)
     {
         const u16 color = random() % DOT_COLORS;
-        u16 h, d;
+        const s16 dx = rays[r].tx - ox;
+        const s16 dy = rays[r].ty - oy;
 
-        for (h = 0; h < BEAM_RAY_LINES; h++)
+        for (d = 1; d <= BEAM_RAY_DOTS; d++)
         {
-            const fix16 hx = Hole_x(h);
-            const fix16 hy = Hole_y(h);
-            const fix16 stepX = (hx - px) / (BEAM_RAY_DOTS + 1);
-            const fix16 stepY = (hy - py) / (BEAM_RAY_DOTS + 1);
-            fix16 x = px;
-            fix16 y = py;
+            // Vector3.Lerp(nave, objetivo, i / 8) con i = 2d, más el ruido.
+            const s16 x = ox + ((dx * (s16)d) >> 2) + (s16)(random() % (2 * ML_RAY_NOISE + 1)) - ML_RAY_NOISE;
+            const s16 y = oy + ((dy * (s16)d) >> 2) + (s16)(random() % (2 * ML_RAY_NOISE + 1)) - ML_RAY_NOISE;
 
-            for (d = 0; d < BEAM_RAY_DOTS; d++)
+            if (MDSPR_OFFSCREEN(x + DOT_SPR_OFF, y + DOT_SPR_OFF)) sprHide(rayDot[slot]);
+            else
             {
-                x += stepX;
-                y += stepY;
-                sprPos(rayDot[slot], F2I(x) + DOT_SPR_OFF, F2I(y) + DOT_SPR_OFF);
+                sprPos(rayDot[slot], x + DOT_SPR_OFF, y + DOT_SPR_OFF);
                 sprAnim(rayDot[slot], color);
                 sprTile(rayDot[slot], dotTile[color]);
-                slot++;
             }
+            slot++;
         }
     }
 
-    while (slot < (BEAM_RAY_LINES * BEAM_RAY_DOTS)) sprHide(rayDot[slot++]);
+    {
+        const u16 shown = slot;
+
+        while (slot < rayShown) sprHide(rayDot[slot++]);
+        rayShown = shown;
+    }
+}
+
+void Beam_updateRays(fix16 px, fix16 py)
+{
+    updateRays(px, py);
 }
 
 void Beam_update(u16 weaponIndex, u16 ammo, fix16 px, fix16 py, fix16 angle)

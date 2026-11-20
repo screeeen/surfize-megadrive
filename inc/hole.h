@@ -7,24 +7,22 @@
 // ===========================================================================
 // Agujeros de spawn (oAgujerSuper del GML, AgujerosPadre de MonsterLite)
 //
-// Desde el bloque 2 de MonsterLite son los SEIS agujeros del prefab
-// AgujerosPadre, en hexágono, con el hexágono centrado en la pantalla
-// (decisión del usuario, Q6): centros en (120, 100), (160, 160), (160, 80),
-// (200, 140), (120, 140) y (200, 100). Ver src/hole.c.
-//
-// Antes eran los cinco oAgujerSuper del room _1 del GML más un sexto
-// reconstruido (558, 754) para cerrar el anillo; esa historia está en
-// docs/PORT_AUDIT_GML.md ("El sexto agujero").
+// Seis agujeros en anillo alrededor del centro del room: los cinco
+// oAgujerSuper del room _1 del GML más un sexto reconstruido (558, 754) para
+// cerrar el anillo; esa historia está en docs/PORT_AUDIT_GML.md ("El sexto
+// agujero"). En el bloque 2 se cambiaron por el hexágono de MonsterLite
+// centrado (Q6) y, por decisión del usuario al cerrarlo, se volvió a este
+// anillo (docs/MONSTERLITE_DECISIONES.md).
 //
 // Los enemigos nacen en un agujero al azar, como en MonsterLite (arañas y
-// gusanos). Lo demás sigue siendo del GML hasta el bloque 8 (la IA): el que
-// vaga va hacia ellos y, al tocar uno, salta al 0.
+// gusanos). Desde el bloque 8 la IA ya no los mira (en MonsterLite WANDER
+// va a un punto al azar de la pantalla): el teletransporte al agujero 0 del
+// GML ya no existe.
 //
 // El dibujo (sprAgujero, 197x197 a escala 1.3 -> 51 px, decisión 3: arte del
 // GML) va al plano A como bloque de 8x8 tiles, no como sprite: seis sprites
 // de ese tamaño serían 24 sprites de hardware de los 80 del VDP. Coste: la
-// posición se ajusta a la rejilla de tiles; en el hexágono, los cuatro
-// agujeros de los lados se pintan 4 px más lejos del centro (ver src/hole.c).
+// posición se ajusta a la rejilla de tiles, hasta 4 px respecto al original.
 // ===========================================================================
 #define HOLE_COUNT 6
 
@@ -63,12 +61,11 @@ u16 Hole_snakeSpawn(void);
 // MonsterLite. (En el GML nacían todas en el último.)
 u16 Hole_spiderSpawn(void);
 
-// Destino del estado de vagar: instance_find(oAgujerSuper, f - random(f-1))
-// con f = N-1, o sea de 1 a N-2 (ver Entity_updateAI).
-u16 Hole_wanderTarget(void);
-
-// TRUE si la caja dada solapa la máscara de algún agujero (place_meeting).
-bool Hole_touching(s16 x, s16 y, s16 w, s16 h);
+// El rayo de LASER y MOIRE choca con los agujeros (en MonsterLite son
+// triggers de 17,6 px de radio, y el rayo ve los triggers): distancia a lo
+// largo del rayo, en 1/64 px, del primero que corta, o -1. El agujero en el
+// que está la nave no cuenta (el rayo sale de dentro).
+s32 Hole_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s);
 
 // Los píxeles de los agujeros en la celda (col, row) del plano, compuestos
 // como se ven (cada uno con su variante). TRUE si algún agujero dibuja en

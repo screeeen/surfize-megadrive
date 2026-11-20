@@ -8,12 +8,12 @@
 // ===========================================================================
 // Jugador (oPlayer del GML, playerMovement de MonsterLite)
 //
-// Bloque 2 de MonsterLite: movimiento directo sin inercia a 4 px/f
-// (speed 0.2 u por tick de FixedUpdate), normalizado en diagonal por
-// decisión del usuario (Q7); wrap toroidal en los bordes exactos, sin margen;
-// nace en (160, 17), la posición de MonsterLite respecto al hexágono de
-// agujeros, que va centrado (Q6); choca con un círculo de 3,6 px. Ver
-// ML_PLAYER_* en arena.h.
+// Movimiento del GML (decisión del usuario, 2026-11-16): acc = 6 por eje
+// (1,44 px/f), sin inercia y sin normalizar la diagonal; wrap toroidal con
+// margen offSet = 15 (3 px). Ver PLAYER_ACC en arena.h. Nace en el centro
+// de la pantalla, como en el GML (decisión del usuario al cerrar el bloque 2,
+// que sustituye a Q6). Choca con un círculo de 3,6 px (bloque 2 de
+// MonsterLite, ML_PLAYER_R2 en arena.h).
 //
 // La posición es el ORIGEN del sprite, igual que en GameMaker, no la esquina
 // superior izquierda: el dibujado resta el origen. La colisión es el círculo
@@ -31,7 +31,7 @@ typedef struct
 {
     Entity e;
     u8     facing;       // frame 0-31: ver Player_facing()
-    s16    controlTime;  // cadencia de disparo (controlTime del GML)
+    s16    controlTime;  // cadencia de disparo (shootTime de MonsterLite, ver src/game.c)
 } Player;
 
 void Player_init(Player *p);
@@ -41,17 +41,14 @@ void Player_init(Player *p);
 // cuatro teclas.
 void Player_update(Player *p, u16 pad);
 
-// Lo que se desplaza la nave este frame con el pad dado, por eje: 4 px/f en
-// horizontal o vertical y 181/64 px/f por eje en diagonal. Lo usa también el
+// Lo que se desplaza la nave este frame con el pad dado: PLAYER_ACC en cada
+// eje pulsado. Lo usa también el
 // pivote del GML, que se mueve con el mismo input que la nave.
 void Player_padDelta(u16 pad, fix16 *dx, fix16 *dy);
 
 // direction = point_direction(x, y, target.x, target.y): el apuntado es
 // instantáneo, no gradual (el giro gradual es cosa de los enemigos).
 void Player_aim(Player *p, fix16 tx, fix16 ty);
-
-// Descuenta la cadencia y devuelve TRUE el frame en que toca disparar.
-bool Player_tickFire(Player *p);
 
 // Frame de rotación más cercano al rumbo real, redondeando a múltiplos de
 // 11,25 grados (32 direcciones). El original rota el sprite de forma continua

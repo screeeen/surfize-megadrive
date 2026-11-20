@@ -37,6 +37,8 @@ SPRITE beamSprite   "sprite/beam.png"   2 2 FAST
 SPRITE digitSprite  "sprite/digits.png" 1 1 FAST
 # oPlayer/Draw_0: los puntos de la linea azul a las replicas
 SPRITE dotSprite    "sprite/dot.png"    1 1 FAST
+# La moneda, desde el arte de MonsterLite (Q11): python3 tools/ml_coin.py
+SPRITE coinSprite   "sprite/coin.png"   2 2 FAST
 
 # Fondos del campo. NO salen del original (el campo es un color plano): son
 # imagenes que pidio el autor (originales en res/bg_src). tools/bg2md.py las
@@ -57,9 +59,13 @@ TILESET holeRedTiles "sprite/hole_red.png" NONE NONE ROW
 SPRITE groundSprite "sprite/ground.png" 3 3 FAST
 # Menu: iconos de arma (oMenu/Draw_0), logo del splash y barra del interludio
 TILESET weaponTiles "sprite/weapons.png" NONE NONE ROW
+# CIRCULAR y MOIRE, desde el arte de MonsterLite (Q11): python3 tools/ml_icons.py
+TILESET weaponMlTiles "sprite/weapons_ml.png" NONE NONE ROW
 # oInGameHUD: BULLETS y KILLS van con global.myFont, que es sFont2 a 16 px
 TILESET hudFont    "sprite/hudfont.png" NONE NONE ROW
 TILESET logoTiles   "sprite/logo.png" NONE NONE ROW
+# El logo de Screen Implosion, desde el arte de MonsterLite: python3 tools/ml_logo.py
+IMAGE silogoImage "sprite/silogo.png" NONE ALL
 TILESET barTile     "sprite/bar.png" NONE NONE ROW
 
 # ---------------------------------------------------------------------------

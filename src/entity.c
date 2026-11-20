@@ -1,7 +1,6 @@
 #include "entity.h"
 #include "fastmath.h"
-#include "hole.h"
-#include "collision.h"
+#include "game.h"
 
 fix16 Entity_mlSpeed(u16 level, u16 maxMu)
 {
@@ -16,50 +15,47 @@ fix16 Entity_mlSpeed(u16 level, u16 maxMu)
     return (fix16)((((u32)v * 16) + 312) / 625);
 }
 
+void Entity_mlRandomPos(fix16 *x, fix16 *y)
+{
+    *x = FIX16(ML_RANDPOS_X0 + (random() % ML_RANDPOS_W));
+    *y = FIX16(ML_RANDPOS_Y0 + (random() % ML_RANDPOS_H));
+}
+
 void Entity_clear(Entity *e)
 {
     e->active = FALSE;
     e->visible = FALSE;
     e->speed = 0;
-    e->velo = 0;
-    e->alarm = 0;
-    e->stateTime = 0;
-    e->state = ENT_STEADY;
+    e->timer = 0;
+    e->turnK = 0;
+    e->state = ENT_ATTACK;
     e->hp = 0;
 }
 
-void Entity_spawnHidden(Entity *e, fix16 x, fix16 y, fix16 velo, fix16 turnRate, s8 hp)
+void Entity_spawnML(Entity *e, fix16 x, fix16 y, fix16 speed, u16 turnKMax, s8 hp)
 {
     e->x = x;
     e->y = y;
-    e->angle = 0;
-    // oSpider/oCabeza1 Create_0: speed = 0; visible = 0; alarm[0] = 90.
-    // La velocidad se guarda aparte (velo) y sólo se aplica en Alarm_0.
-    e->speed = 0;
-    e->velo = velo;
-    e->turnRate = turnRate;
-    e->alarm = ENEMY_APPEAR_DELAY;
-    e->stateTime = 0;
-    e->state = ENT_STEADY;
-    e->visible = FALSE;
+    // transform.rotation = Euler(.., .., Random.Range(0f, 360f)): en 1/64 de
+    // grado, 0 .. 23039.
+    e->angle = (fix16)(random() % (u16)FIX16(360));
+    e->speed = speed;
+    // turningSpeed = Random.Range(1f, turningSpeedMax / 1.4f), ya como la
+    // fracción por frame del Slerp (ML_TURN_K_*).
+    e->turnK = ML_TURN_K_MIN + (random() % (u16)(turnKMax - ML_TURN_K_MIN + 1));
+    // optionState = (enemyState) Random.Range(0, 2): ATTACK o WANDER.
+    e->state = (random() & 1) ? ENT_WANDER : ENT_ATTACK;
+    e->timer = ML_AI_TIMER_START;
+    // randomPos = globales.getRandomPos(). target es un Vector2 sin
+    // inicializar: (0, 0) del mundo, que con la cámara en el origen
+    // (S/cameraScript.cs) es el centro de la pantalla. Sólo se nota si nace
+    // en ATTACK sin jugador ni nave holo.
+    Entity_mlRandomPos(&e->rx, &e->ry);
+    e->tx = FIX16(PLAYFIELD_W / 2);
+    e->ty = FIX16(PLAYFIELD_H / 2);
+    e->visible = TRUE;
     e->active = TRUE;
     e->hp = hp;
-}
-
-bool Entity_tickAppear(Entity *e)
-{
-    if (e->visible) return TRUE;
-
-    if (e->alarm > 0)
-    {
-        e->alarm--;
-        return FALSE;
-    }
-
-    // oSpider/Alarm_0: "speed = velo; visible = 1"
-    e->speed = e->velo;
-    e->visible = TRUE;
-    return TRUE;
 }
 
 fix16 Entity_angleTo(const Entity *e, fix16 tx, fix16 ty)
@@ -69,23 +65,11 @@ fix16 Entity_angleTo(const Entity *e, fix16 tx, fix16 ty)
     return Fast_angle(e->x, e->y, tx, ty);
 }
 
-void Entity_turnTowards(Entity *e, fix16 targetAngle, fix16 turnRate)
-{
-    fix16 diff = fnorm(targetAngle - e->angle);
-
-    // Camino corto: pasa el rango [0, 360) a (-180, 180].
-    if (diff > FIX16(180)) diff -= FIX16(360);
-
-    if (diff > turnRate)        e->angle = fnorm(e->angle + turnRate);
-    else if (diff < -turnRate)  e->angle = fnorm(e->angle - turnRate);
-    else                        e->angle = fnorm(targetAngle);
-}
-
 void Entity_advance(Entity *e)
 {
     if (e->speed == 0) return;
 
-    // El ángulo se mantiene normalizado en Entity_turnTowards, así que basta
+    // El ángulo se mantiene normalizado (Entity_moveML), así que basta
     // con pasarlo a grados enteros y leer la tabla: el seno y el coseno de
     // SGDK normalizan otra vez y encadenan comparaciones por cuadrante.
     {
@@ -142,83 +126,77 @@ s32 Entity_distSq(fix16 ax, fix16 ay, fix16 bx, fix16 by)
 }
 
 // ===========================================================================
-// stSteadyW / stAppearA1W / stWalkingA1W
-//
-// El state_machine del original transiciona con state_nextnow, que ejecuta
-// el estado siguiente en el MISMO step, y compara el tiempo con igualdad
-// exacta ("if (state_time = 300)"). Esto reproduce las dos cosas.
+// enemyMov de MonsterLite (bloque 8)
 // ===========================================================================
-bool Entity_updateAI(Entity *e, bool hasPlayer, fix16 px, fix16 py, s16 boxOX, s16 boxOY, s16 boxW, s16 boxH)
+
+// "level % 100" en quintos, calculado sólo cuando cambia el nivel: el módulo
+// es un divu.w de unos 140 ciclos y se pediría por enemigo y frame.
+static u16 wanderLevel = 0xFFFF;
+static s16 wanderDec;
+
+static FORCE_INLINE s16 wanderStep(void)
 {
-    u16 guard = 3;      // como mucho tres transiciones en el mismo frame
-    bool snapped = FALSE;
-
-    while (guard--)
+    if (g_level != wanderLevel)
     {
-        if (e->state == ENT_STEADY)
+        wanderLevel = g_level;
+        wanderDec = (s16)(ML_AI_TIMER_WANDER * (g_level % 100));
+    }
+    return wanderDec;
+}
+void Entity_moveML(Entity *e, bool hasTarget, fix16 tx, fix16 ty)
+{
+    // switch (optionState): ATTACK va al jugador o, si no hay, a una nave
+    // holo (lo resuelve quien llama); sin ninguno, target no cambia. WANDER
+    // va a randomPos y además baja el temporizador.
+    if (e->state == ENT_ATTACK)
+    {
+        if (hasTarget)
         {
-            // stSteadyW: quieto hasta state_time == 6
-            if (e->stateTime == ST_STEADY_TIME)
-            {
-                e->state = ENT_ATTACK;
-                e->stateTime = 0;
-                continue;               // state_nextnow
-            }
-
-            e->stateTime++;
-            return snapped;
-        }
-
-        if (e->state == ENT_ATTACK)
-        {
-            // stAppearA1W: persigue al jugador girando velo grados por frame
-            if (hasPlayer)
-                Entity_turnTowards(e, Entity_angleTo(e, px, py), e->turnRate);
-
-            if (e->stateTime == ST_ATTACK_TIME)
-            {
-                e->state = ENT_WANDER;
-                e->stateTime = 0;
-                continue;
-            }
-
-            e->stateTime++;
-            return snapped;
-        }
-
-        // stWalkingA1W: va hacia un agujero girando 2 grados por frame.
-        //
-        // El original re-sortea el agujero destino CADA frame, y además lo
-        // hace con un bucle que deja fuera los agujeros 0 y 4
-        // (instance_find(oAgujerSuper, f - random(f-1)) con f = 4 da 1, 2 o 3
-        // con igual probabilidad). Portado tal cual: el rumbo tiembla y el
-        // enemigo deriva hacia el racimo central de agujeros.
-        {
-            const u16 h = Hole_wanderTarget();
-
-            Entity_turnTowards(e, Entity_angleTo(e, Hole_x(h), Hole_y(h)), WANDER_TURN);
-
-            // "if place_meeting(x,y,oAgujerSuper) {x = oAgujerSuper.x; ...}":
-            // oAgujerSuper sin cualificar es la PRIMERA instancia, así que al
-            // tocar cualquier agujero el enemigo salta al agujero 0.
-            if (Hole_touching(F2I(e->x) + boxOX, F2I(e->y) + boxOY, boxW, boxH))
-            {
-                e->x = Hole_x(0);
-                e->y = Hole_y(0);
-                snapped = TRUE;
-            }
-
-            if (e->stateTime == ST_WANDER_TIME)
-            {
-                e->state = ENT_ATTACK;
-                e->stateTime = 0;
-                continue;
-            }
-
-            e->stateTime++;
-            return snapped;
+            e->tx = tx;
+            e->ty = ty;
         }
     }
+    else
+    {
+        e->tx = e->rx;
+        e->ty = e->ry;
+        // "timer -= globales.level % 100", en quintos.
+        e->timer -= wanderStep();
+    }
 
-    return snapped;
+    {
+        // calculateAngle(target) con la posición de ANTES de avanzar, y
+        // Translate(right * step) con el rumbo de antes de girar.
+        const fix16 want = Fast_angle(e->x, e->y, e->tx, e->ty);
+        fix16 diff;
+
+        Entity_advance(e);
+
+        // Quaternion.Slerp(rotation, Euler(0, 0, want), turningSpeed * 0.02):
+        // gira por el camino corto la fracción turnK / 4096 de lo que falta.
+        // diff cabe en 16 bits (+-180 grados = +-11520) y turnK también, así
+        // que el producto es un muls.w. Se redondea al 1/64 de grado más
+        // cercano: el giro deja de avanzar cuando faltan menos de
+        // 2048 / turnK sesentaicuatroavos (0,39 grados con el giro más lento).
+        diff = fnorm(want - e->angle);
+        if (diff > FIX16(180)) diff -= FIX16(360);
+
+        e->angle = fnorm(e->angle +
+                         (fix16)((((s32)(s16)diff * (s16)e->turnK) + (1 << (ML_TURN_K_SHIFT - 1)))
+                                 >> ML_TURN_K_SHIFT));
+    }
+}
+
+void Entity_tickML(Entity *e)
+{
+    // "timer -= 1; if (timer < 0) { resetMovement(); timer = 30; }" a 60 Hz.
+    e->timer -= ML_AI_TIMER_UPDATE;
+    if (e->timer >= 0) return;
+
+    // resetMovement(): estado y randomPos nuevos. También pone target en el
+    // jugador si lo hay, pero eso no se ve: en ATTACK move() lo vuelve a
+    // poner en el jugador en el tick siguiente y en WANDER lo pisa randomPos.
+    e->state = (random() & 1) ? ENT_WANDER : ENT_ATTACK;
+    Entity_mlRandomPos(&e->rx, &e->ry);
+    e->timer = ML_AI_TIMER_RESET;
 }

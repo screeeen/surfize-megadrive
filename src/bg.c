@@ -18,9 +18,22 @@ typedef struct
     const u16     *map;
 } BgDef;
 
+// Las ruinas en verde oscuro y con menos brillo (petición del autor; no sale
+// del GML ni de MonsterLite). bg_ruins_palette, la que genera bg2md.py, es
+// una escala de grises de 8 tonos (índices 1-8: 0x000 .. 0xEEE); ésta deja
+// los mismos 8 tonos en el mismo orden, todos distintos, pasados a verde y
+// con el más claro en 0x282 en vez de 0xEEE. Formato del VDP: 0x0BGR.
+static const u16 bgRuinsGreen[16] =
+{
+    0x0E0E,                                     // 0: transparente, no se usa
+    0x0000, 0x0020, 0x0040, 0x0042,             // 1-4
+    0x0060, 0x0062, 0x0262, 0x0282,             // 5-8
+    0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+};
+
 static const BgDef bgDefs[BG_COUNT] =
 {
-    { &bgRuinsTiles,       bg_ruins_palette,       bg_ruins_map       },
+    { &bgRuinsTiles,       bgRuinsGreen,           bg_ruins_map       },
 };
 
 static const u16 blackPal[16];
@@ -97,6 +110,11 @@ void Bg_setCover(s16 top, s16 bottom)
 {
     coverTop = top;
     coverBottom = bottom;
+}
+
+const u16 *Bg_palette(void)
+{
+    return bgDefs[bgCur].pal;
 }
 
 u16 Bg_current(void)

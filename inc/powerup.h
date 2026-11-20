@@ -20,9 +20,10 @@
 typedef enum
 {
     POW_PACK = 0,       // oPaquete: munición
-    POW_BOOM,           // oBoomPowUp: mata las arañas en pantalla
-    POW_REPLICA,        // oNaveReplicaPowUp: crea una nave réplica
-    POW_RAYS            // oRayosPowUp: lanza un rayo
+    POW_BOOM,           // Bomba de MonsterLite, con el arte de oBoomPowUp
+    POW_REPLICA,        // oNaveReplicaPowUp: ya no sale (la holo es un proyectil)
+    POW_RAYS,           // RayosBomba de MonsterLite, con el arte de oRayosPowUp
+    POW_COIN            // Coin de MonsterLite (bloque 4): sólo en PowerPickup
 } PowerType;
 
 typedef struct
@@ -31,24 +32,42 @@ typedef struct
     fix16 x;
     fix16 y;
     u16   ammo;         // munición si era un paquete
+    u16   value;        // monedas si era una moneda
 } PowerPickup;
 
 void Pow_initAll(void);
 
-// El latido de oPaquete y compañía. Una vez por frame.
+// El latido de oPaquete y compañía, la caducidad del paquete y de la moneda
+// (167 f), la subida del paquete recogido y el vuelo de la moneda. Una vez
+// por frame, también fuera de la partida (en MonsterLite van en Update).
 void Pow_updateAll(void);
 
-// generaPaquete(): escala según lo que haya en pantalla. Se llama desde
-// checkMorte(), con la posición de la cabeza que acaba de morir.
-void Pow_generate(fix16 x, fix16 y);
+// Con el tiempo parado (Q8): sólo lo que en MonsterLite va en Update sin
+// deltaTime, la caducidad y la subida del paquete.
+void Pow_tickFrozen(void);
+
+// leavePow() de MonsterLite (bloque 4): lo que suelta un enemigo muerto por
+// un disparo, 50 % moneda y 50 % paquete; packOnly para la bola CIRCULAR
+// contra una araña, que siempre suelta paquete. Sustituye a generaPaquete()
+// del GML, que ya no se usa (los power-ups vendrán con las oleadas, bloque 7).
+void Pow_drop(fix16 x, fix16 y, bool packOnly);
 
 // Recoge lo que toque la nave: en MonsterLite todo lo que recoge el jugador
 // lo toca su esfera de 3,6 px (OnTriggerEnter del prefab player), así que es
 // el círculo de centro (cx, cy) contra la caja del objeto. TRUE si ha cogido
 // algo.
+// Las oleadas 3 y 4 de MonsterLite (bloque 7): la bomba o los rayos en
+// (x, y). No caducan. FALSE si ya hay ML_GROUND_POW_MAX de los dos.
+bool Pow_spawnML(u8 type, fix16 x, fix16 y);
+
 bool Pow_collect(s16 cx, s16 cy, u8 weaponIndex, PowerPickup *out);
 
 u16 Pow_count(u8 type);
+
+// El rayo de LASER y MOIRE choca con lo que hay en el suelo (en MonsterLite
+// paquetes, bombas, rayos y naves holo son triggers, y el rayo los ve):
+// distancia a lo largo del rayo, en 1/64 px, del primero que corta, o -1.
+s32 Pow_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s);
 
 void Pow_clearAll(void);
 

@@ -42,18 +42,35 @@ extern u16 g_kills;
 extern u32 g_lastScore;
 extern u16 g_maxKills;
 
-// global.playerBulletsCounter, global.weapon_index
+// La munición del arma equipada (bullets[currentWeapon] de MonsterLite) y el
+// arma (currentWeapon, ver inc/weapon.h). Mientras se juega, la munición
+// vive en g_playerBullets; g_ammo guarda la de cada arma entre partidas
+// (Q10: hasta apagar la consola).
 extern u16 g_playerBullets;
 extern u16 g_weaponIndex;
+extern u16 g_ammo[];
 
-// Lista de armas desbloqueadas (ds_list weapons) y umbral siguiente
-// (nextWeapon), que el menú de FASE 8 usará para elegir arma.
-extern u16 g_weaponsUnlocked;
+// Monedas (CoinsManager de MonsterLite, bloque 4): el saldo, que se gastará
+// en la tienda (bloque 5) y se guardará en SRAM (bloque 6), y las de esta
+// partida (earnedCoins), que enseñará el game over.
+extern u32 g_coins;
+extern u32 g_coinsEarned;
+
+// Armas que se pueden elegir en el menú, un bit por WeaponId (ver
+// checkWeapon en src/game.c), y kills de récord para la siguiente que va por
+// récord (nextWeapon del GML).
+extern u16 g_weaponsAvail;
 extern u32 g_nextWeapon;   // kills para la siguiente arma (ver checkWeapon)
 #define NEXT_WEAPON_DONE 0xFFFFFFFFUL   // todas desbloqueadas: el menú pinta "re"
 
-// global.credits: el original es de recreativa y no deja empezar sin crédito
-extern u16 g_credits;
+// Armas compradas en la tienda, un bit por WeaponId (WBLOCK siempre), y la
+// mejor puntuación al empezar la partida (para el NEW RECORD! del game over).
+extern u16 g_weaponsBought;
+extern u32 g_bestAtStart;
+
+// Recalcula g_weaponsAvail: las compradas y las del GML que se desbloquean
+// por récord. La llama la tienda al comprar.
+void Game_checkWeapons(void);
 
 extern u8 g_state;
 

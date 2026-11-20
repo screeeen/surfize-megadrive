@@ -28,10 +28,11 @@
 // frame siguiente mientras quede munición. O sea: 1 de daño por frame de
 // contacto, y el haz parpadea al tocar.
 //
-// 2. LA LÍNEA A LAS RÉPLICAS
+// 2. LA LÍNEA A LAS NAVES HOLO
 //
-// oPlayer/Draw_0: draw_line_color(x, y, oTri.x, oTri.y, c_blue, c_blue) por
-// cada réplica viva. Es sólo dibujo, sin colisión.
+// gizmosProxy/LineScr de MonsterLite: una línea azul (de azul a blanco) del
+// jugador a cada nave holo activa. Es sólo dibujo, sin colisión. En el GML
+// era la línea de oPlayer/Draw_0 a cada réplica.
 //
 // El VDP no dibuja líneas ni rota ni mezcla alfa: las dos cadenas se hacen
 // con sprites. Desviaciones (ver docs/PORT_AUDIT_GML.md): el haz no late de
@@ -39,11 +40,23 @@
 // la línea azul son puntos espaciados, no un trazo continuo.
 // ===========================================================================
 
-#define BEAM_LINE_DOTS  6       // puntos por línea a cada réplica
-#define BEAM_RAY_LINES  HOLE_COUNT   // una descarga del rayo a cada agujero
-#define BEAM_RAY_DOTS   6
+// 3. LOS RAYOS DE MONSTERLITE (bloque 7)
+//
+// RayoScr: un LineRenderer de 9 vértices de la nave al objetivo, los siete
+// intermedios con ruido de +-8 px y color al azar cada frame. Aquí un punto
+// en los vértices 2, 4 y 6.
+//
+// Con las 10 holo de MonsterLite y un rayo por enemigo (hasta 11), los puntos
+// no caben si se ponen tantos como antes (6 por línea): 60 + 66 de 80 sprites
+// de hardware. Se dejan en 3 por línea y por rayo (30 + 33). Ver el
+// presupuesto en docs/PORT_AUDIT_GML.md, bloque 7.
+#define BEAM_LINE_DOTS  3       // puntos por línea a cada holo activa
+#define BEAM_RAY_DOTS   3       // puntos por rayo
 
 void Beam_init(void);
+
+// Sólo los rayos de MonsterLite, que siguen con el tiempo parado.
+void Beam_updateRays(fix16 px, fix16 py);
 
 // Los puntos de líneas y rayos: se reparten los últimos (ver src/beam.c).
 void Beam_initDots(void);

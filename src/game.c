@@ -24,6 +24,9 @@
 #include "beam.h"
 #include "spr.h"
 #include "gm_art.h"
+#include "weapon.h"
+#include "save.h"
+#include "mlpow.h"
 
 #ifndef PORT_VRAM_REPORT
 // Imprime el reparto de tiles de VRAM, los sprites de hardware en uso y el
@@ -79,9 +82,13 @@ u32   g_lastScore;
 u16   g_maxKills;
 u16   g_playerBullets;
 u16   g_weaponIndex;
-u16   g_weaponsUnlocked;
+u16   g_weaponsAvail;
+u32   g_coins;
+u32   g_coinsEarned;
+u16   g_ammo[WPN_COUNT];
 u32   g_nextWeapon;
-u16   g_credits;
+u16   g_weaponsBought;
+u32   g_bestAtStart;
 u8    g_state;
 
 static Player player;
@@ -101,57 +108,58 @@ static bool playerIn;
 static u16 graceFrames;
 static bool holdShown;
 
+// Thread.Sleep(100) al tocar la bomba o los rayos (Q17): frames que le
+// quedan a la congelación.
+static u16 hitstop;
+
 // El aviso, con la fuente del sistema en vez del "KEEP YOUR FINGER\n ON
 // SCREEN!" y la mano (textura dedo) de MonsterLite, que no tienen
 // equivalente con el pad. Va centrado y a la altura del original: su Label
 // empieza en y = H - H / 2.9 = 157 px (S/HUD.cs:495-497), que en el plano
 // A, de 8 en 8, es la fila 20 (160 px). Si cambia ML_TIME_BUTTON, cambia
 // este texto.
-#define HOLD_TEXT   "HOLD B"
+#define HOLD_TEXT   "HOLD A/B/C"
 #define HOLD_ROW    20
 #define HOLD_COL    (((PLAYFIELD_W / 8) - (sizeof(HOLD_TEXT) - 1)) / 2)
 
-// stCheckWeapon(). Hay que leerlo con cuidado porque tiene un desfase de uno
-// que NO es un despiste del port:
+// Qué armas se pueden elegir en el menú.
+//
+// Decisión del usuario al cerrar el bloque 2: las armas de MonsterLite
+// (WBLOCK, LASER, TWAY, CIRCULAR, MOIRE) se compran en la tienda GEAR
+// (bloque 5) y WBLOCK es gratis (W/WeaponsController.cs: weaponPurchased[0]
+// = true). Aquí entran las compradas (g_weaponsBought).
+//
+// PIVOT y PARA siguen el desbloqueo por récord del GML, stCheckWeapon(), que
+// hay que leer con cuidado porque tiene un desfase de uno que NO es un
+// despiste del port:
 //
 //     for (g = 0; g < global.maxKills; g += 1) {
 //         if (g >= laserEnabled) { ...añade laser...; nextWeapon = threewayEnabled }
 //         ...
 //     }
 //
-// El mayor valor que toma g es maxKills - 1, así que "g >= laserEnabled" con
-// laserEnabled = 1 pide maxKills >= 2. O sea que los umbrales de verdad son
-// 2, 3, 4 y 5 kills, no 1, 2, 3 y 4. El port los tenía uno por debajo y
-// regalaba el láser con la primera muerte.
+// El mayor valor que toma g es maxKills - 1, así que "g >= umbral" pide
+// maxKills > umbral. En el GML el PIVOT era la cuarta arma (umbral
+// CIRCULAR_ENABLED, 80) y el PARA la quinta (TRI_ENABLED, 100); LASER (40) y
+// 3WAY (60) ya no van por récord.
 //
-// nextWeapon arranca en oWeaponBox/Create_0. En surfize_changes valía 999999
-// y el menú enseñaba "NEXT 999999" hasta el primer desbloqueo; en
-// neu_swarm2_40, la versión que se porta, vale 40: el primer umbral.
-#define NEXT_WEAPON_NONE LASER_ENABLED
+// nextWeapon arranca en oWeaponBox/Create_0. En neu_swarm2_40, la versión
+// que se porta, vale 40: el primer umbral. Ahora el primero que queda es el
+// del PIVOT.
+#define NEXT_WEAPON_NONE CIRCULAR_ENABLED
 
-static void checkWeapon(void)
+void Game_checkWeapons(void)
 {
-    u16 unlocked = 1;           // WBLOCK siempre está
+    u16 avail = g_weaponsBought & WPN_ML_MASK;
     u32 next = NEXT_WEAPON_NONE;
 
-    if (g_maxKills > LASER_ENABLED)    { unlocked = 2; next = THREEWAY_ENABLED; }
-    if (g_maxKills > THREEWAY_ENABLED) { unlocked = 3; next = CIRCULAR_ENABLED; }
-    if (g_maxKills > CIRCULAR_ENABLED) { unlocked = 4; next = TRI_ENABLED; }
+    if (g_maxKills > CIRCULAR_ENABLED) { avail |= 1 << WPN_PIVOT; next = TRI_ENABLED; }
     // neu_swarm2_40 pone aquí nextWeapon = 're' (una cadena: el menú enseña
     // "NEXT re"). Se porta con la marca NEXT_WEAPON_DONE, que el menú pinta así.
-    if (g_maxKills > TRI_ENABLED)      { unlocked = 5; next = NEXT_WEAPON_DONE; }
+    if (g_maxKills > TRI_ENABLED)      { avail |= 1 << WPN_PARA; next = NEXT_WEAPON_DONE; }
 
-    g_weaponsUnlocked = unlocked;
+    g_weaponsAvail = avail;
     g_nextWeapon = next;
-}
-
-// generaPaquete(): se llama con cada cabeza muerta, desde su posición.
-// El original escala: hasta 16 paquetes crea paquetes; luego una bomba, luego
-// naves réplica, luego rayos. Esos tres power-ups están pendientes, así que
-// por ahora sólo salen paquetes hasta el tope.
-static void generaPaquete(fix16 x, fix16 y)
-{
-    Pow_generate(x, y);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,8 +181,9 @@ static void generaPaquete(fix16 x, fix16 y)
 // cada tipo son independientes.
 //
 // Las oleadas de power-ups (3 bomba 1/6, 4 rayos 1/7, 6/16/19/20/21 nave
-// holo) y el texto "!!!" de la 27 son de los bloques 7 y 9: de momento no
-// crean nada. Los power-ups del GML siguen saliendo por generaPaquete().
+// holo) van aparte, en mlPowWave (bloque 7). El texto "!!!" de la 27 es del
+// bloque 9. generaPaquete() del GML ya no se usa (bloque 4): por cada baja
+// con disparo sale moneda o paquete (Pow_drop).
 // ---------------------------------------------------------------------------
 typedef struct
 {
@@ -188,10 +197,10 @@ static const MLWave mlWaves[ML_WAVE_MOD + 1] =
     { 0, 2, 0 },    //  0
     { 0, 2, 0 },    //  1
     { 1, 1, 0 },    //  2
-    { 0, 0, 0 },    //  3  bomba (bloque 7)
-    { 0, 0, 0 },    //  4  rayos (bloque 7)
+    { 0, 0, 0 },    //  3  bomba (mlPowWave)
+    { 0, 0, 0 },    //  4  rayos (mlPowWave)
     { 0, 2, 0 },    //  5
-    { 0, 0, 0 },    //  6  nave holo (bloque 7)
+    { 0, 0, 0 },    //  6  nave holo (mlPowWave)
     { 0, 2, 0 },    //  7
     { 0, 1, 0 },    //  8
     { 0, 2, 0 },    //  9
@@ -201,12 +210,12 @@ static const MLWave mlWaves[ML_WAVE_MOD + 1] =
     { 2, 0, 0 },    // 13
     { 2, 1, 0 },    // 14
     { 0, 0, 0 },    // 15  no hay caso
-    { 0, 0, 0 },    // 16  nave holo (bloque 7)
+    { 0, 0, 0 },    // 16  nave holo (mlPowWave)
     { 1, 1, 0 },    // 17
     { 2, 1, 0 },    // 18
-    { 0, 0, 0 },    // 19  nave holo (bloque 7)
-    { 0, 0, 0 },    // 20  nave holo (bloque 7)
-    { 0, 0, 0 },    // 21  nave holo (bloque 7)
+    { 0, 0, 0 },    // 19  nave holo (mlPowWave)
+    { 0, 0, 0 },    // 20  nave holo (mlPowWave)
+    { 0, 0, 0 },    // 21  nave holo (mlPowWave)
     { 2, 1, 0 },    // 22
     { 2, 1, 0 },    // 23
     { 1, 1, 0 },    // 24
@@ -272,6 +281,64 @@ static void mlCreateSnake(void)
     else if (n2 < MAX_CABEZA_2) Snake_spawn(SNAKE_TYPE_2);
 }
 
+// globales.getRandomPos(): Random.Range(0.1, 0.9) del ancho y del alto. La
+// comparte la IA de los enemigos (WANDER).
+static void mlRandomPos(fix16 *x, fix16 *y)
+{
+    Entity_mlRandomPos(x, y);
+}
+
+// Los enemigos sin jugador (los 40 f del arranque, el game over y la
+// tienda): en ATTACK, enemyMov.move() va a por una nave holo si la hay
+// (FindGameObjectWithTag("NaveProxy")) y, si no, sigue hacia su último
+// destino. Se busca una vez por frame para todos.
+static void enemiesNoPlayer(void)
+{
+    fix16 hx = 0, hy = 0;
+    const bool holo = Proj_anyHolo(&hx, &hy);
+
+    Enemy_updateAll(holo, hx, hy);
+    Snake_updateAll(holo, hx, hy);
+
+    // Y si la tocan, la destruyen (collideAndDie): sin esto, fuera de la
+    // partida la holo era inmortal y pasaba así a la siguiente.
+    if (holo) Proj_holoContact();
+}
+
+// Las oleadas de power-ups (S/gameControl.cs:477-571).
+static void mlPowWave(u16 r)
+{
+    fix16 x, y;
+
+    switch (r)
+    {
+        case 3:     // "if (Random.Range(0, 6) == 1) Instantiate(bomba, ...)"
+            if ((random() % ML_BOMB_CHANCE) == 1)
+            {
+                mlRandomPos(&x, &y);
+                Pow_spawnML(POW_BOOM, x, y);
+            }
+            break;
+
+        case 4:     // "if (Random.Range(0, 7) == 1) Instantiate(rayoBomba, ...)"
+            if ((random() % ML_RAYS_CHANCE) == 1)
+            {
+                mlRandomPos(&x, &y);
+                Pow_spawnML(POW_RAYS, x, y);
+            }
+            break;
+
+        case 6: case 16: case 19: case 20: case 21:
+            // "if (FindGameObjectsWithTag("NaveProxy").Length < maxNaveProxy)"
+            mlRandomPos(&x, &y);
+            Proj_spawnHolo(x, y, FALSE);
+            break;
+
+        default:
+            break;
+    }
+}
+
 static void mlWave(void)
 {
     const u16 index = (u16)(g_score % ML_WAVE_MOD);
@@ -286,6 +353,20 @@ static void mlWave(void)
 
     for (i = 0; i < w->spiders; i++) mlCreateSpider();
     for (i = 0; i < snakes; i++) mlCreateSnake();
+    mlPowWave(r);
+}
+
+// Bajas que no vienen de un proyectil (la bomba y los rayos): clearEnemies()
+// suma "globales.kills += 1 * globales.level" por cada una, como cualquier
+// baja (Q5), y no suelta nada.
+static void addKills(u16 n)
+{
+    if (n == 0) return;
+
+    g_score += (u32)n * g_level;
+    if (g_lastScore < g_score) g_lastScore = g_score;
+    g_kills += n;
+    Game_checkWeapons();
 }
 
 bool Game_levelUpgrade(void)
@@ -314,10 +395,17 @@ static bool closestThreat(s16 x, s16 y, s16 *outX, s16 *outY)
     // obligaba a recorrer los 52 eslabones del gusano siempre. Ahora las
     // arañas van primero (son ocho y suelen estar cerca) y con su distancia
     // en la mano el gusano se descarta entero por su caja envolvente.
+    //
+    // Bloque 3 de MonsterLite: el objetivo es el de getClosest
+    // (S/enemyController.cs:194), que recorre arañas y CABEZAS, no eslabones.
+    // En el GML era instance_nearest sobre oMalo, eslabones incluidos; pero
+    // ahora las balas atraviesan los eslabones, y apuntando al eslabón más
+    // cercano casi nunca daban en la cabeza (medido: 0 bajas en 600 f con la
+    // bala fina).
     s32 best = 0x7FFFFFFF;
     bool found = Enemy_closest(x, y, outX, outY, &best);
 
-    if (Snake_closest(x, y, outX, outY, &best)) found = TRUE;
+    if (Snake_closestHead(x, y, outX, outY, &best)) found = TRUE;
 
     return found;
 }
@@ -360,7 +448,12 @@ void Game_init(void)
 
     g_maxKills = 0;
     g_lastScore = 0;
-    checkWeapon();
+    // WBLOCK, gratis y siempre comprada; el arma de una instalación nueva.
+    g_weaponsBought = 1 << WPN_WBLOCK;
+    g_weaponIndex = WPN_WBLOCK;
+    // Lo guardado en la SRAM, si lo hay, pisa esos valores (bloque 6).
+    Save_load();
+    Game_checkWeapons();
 
     // El original NO empieza jugando. El room _1 trae ya colocados un oMenu y
     // un oSplashS, y global.started es false: lo primero que se ve es la
@@ -394,6 +487,8 @@ void Game_start(void)
     // startGame() sólo hace "with oMalo instance_destroy()": las naves
     // réplica y lo que haya en el suelo siguen de la partida anterior.
     Proj_clearKeepTris();
+    MLPow_clear();
+    hitstop = 0;
     Effect_clearAll();
     Debris_clearAll();
     Flyer_clearAll();
@@ -416,9 +511,18 @@ void Game_start(void)
     g_level = 1;
     g_factorLevel = 1;
     g_kills = 0;
-    // oPlayer/Create_0: "global.playerBulletsCounter = 0". Cada partida
-    // empieza sin munición, así que de salida dispara la bala por defecto.
-    g_playerBullets = 0;
+    // Munición del arma elegida. En MonsterLite hay un contador por arma
+    // (WeaponsController.bullets[5]) que no se reinicia al empezar partida:
+    // lo que sobra pasa a la siguiente. Q10: se conserva hasta apagar la
+    // consola (g_ammo está en RAM, a cero al encender) y no va a la SRAM.
+    // (El GML la ponía a 0 en cada partida.)
+    g_playerBullets = g_ammo[g_weaponIndex];
+    // gameControl.toGame: "CoinsManager.earnedCoins = 0". El saldo no se
+    // toca (se guardará en SRAM en el bloque 6; hasta entonces, hasta apagar).
+    g_coinsEarned = 0;
+    // El récord de antes de la partida: el game over dice NEW RECORD! si se
+    // supera (gameOverSrc, 257-264).
+    g_bestAtStart = g_lastScore;
 
     // El arma NO se reinicia aquí: startGame() del original no toca
     // global.weapon_index, que sólo se pone a 0 en scrInit al arrancar la
@@ -446,6 +550,9 @@ void Game_start(void)
 
 void Game_killPlayer(void)
 {
+    // La munición que sobra se queda en su arma (Q10, ver Game_start).
+    g_ammo[g_weaponIndex] = g_playerBullets;
+
     // mataPlayer(): "instance_create(x, y, oMuerte)" y luego
     // "with oPlayer instance_destroy()": la nave desaparece mientras dura el
     // menú, pero antes deja el fogonazo. oMuerte/Create_0 suena morteSnd.
@@ -464,19 +571,27 @@ void Game_killPlayer(void)
     // agujeros siguen puestos. Tampoco se borran los paquetes ni las naves
     // réplica: pasan a la partida siguiente.
     Proj_clearKeepTris();
+    // Los rayos en curso se pierden con la nave (ver docs/PORT_AUDIT_GML.md,
+    // bloque 7).
+    MLPow_clear();
     Debris_clearAll();
     Flyer_clearAll();
     Beam_clear();
     Pow_replaceAll();
 
-    checkWeapon();
+    Game_checkWeapons();
     Menu_enter();
+    // toGameOverRoom -> setData (S/gameControl.cs:906-914): récord, arma,
+    // partidas, sonido y música. Menu_enter acaba de apuntar el récord de
+    // bajas.
+    g_gamesPlayed++;
+    Save_write();
     g_state = GAME_MENU;
 }
 
 // startGame() de MonsterLite, a los 0,8 s: "Instantiate (player, highPos, ...)".
-// Player_init la pone en highPos respecto al hexágono de agujeros centrado
-// (bloque 2, Q6): (160, 17).
+// Player_init la pone en el centro de la pantalla, como el GML (decisión del
+// usuario al cerrar el bloque 2): (160, 120).
 static void playerEnter(void)
 {
     Player_init(&player);
@@ -527,8 +642,7 @@ static bool startSequence(void)
 static void waitingUpdate(void)
 {
     Shake_update();
-    Enemy_updateAll(FALSE, 0, 0);
-    Snake_updateAll(FALSE, 0, 0);
+    enemiesNoPlayer();
     Pow_updateAll();
     Effect_updateAll();
     Flyer_updateAll();
@@ -536,7 +650,7 @@ static void waitingUpdate(void)
 }
 
 // ---------------------------------------------------------------------------
-// El tiempo sólo corre con B pulsado (Q8, bloque 2)
+// El tiempo sólo corre con A, B o C pulsado (Q8, bloque 2)
 //
 // MonsterLite pone Time.timeScale = 0 cuando no hay ningún dedo en pantalla,
 // pasado el "ARENA!" (HUD.counter >= 60). Con timeScale a 0 Unity deja de
@@ -544,17 +658,19 @@ static void waitingUpdate(void)
 // sigue cada frame. Lo que hay hoy en el port, repartido así:
 //
 //   - se para (FixedUpdate, física, corrutinas con WaitForSeconds y
-//     animaciones): los enemigos (movimiento, IA del GML y su aparición), la
+//     animaciones): los enemigos (move() de enemyMov y las migas), la
 //     nave (no se mueve, no gira, no dispara), las balas, la metralla, el
 //     pivote y las réplicas, la secuencia de arranque y las oleadas, las
 //     explosiones, los números que vuelan al HUD (en MonsterLite van con
 //     Time.deltaTime, que vale 0) y el latido de lo que hay en el suelo;
 //   - sigue: el HUD.
 //
-// Lo que en MonsterLite sigue corriendo en Update (caducidad de paquetes y
-// monedas, LASER y MOIRE matando, bolas CIRCULAR persiguiendo, rayos, IA de
-// enemyMov) todavía no existe en el port: cada bloque que lo traiga lo tiene
-// que dejar fuera de este corte. Ver docs/PORT_AUDIT_GML.md, bloque 2.
+// Lo que en MonsterLite sigue corriendo en Update se deja fuera del corte en
+// stoppedUpdate: la caducidad de paquetes y monedas (bloque 4), los rayos y
+// el giro de la nave holo inactiva (bloque 7) y el temporizador de enemyMov,
+// que sigue re-sorteando estado y destino (bloque 8). LASER y MOIRE matando
+// y las bolas CIRCULAR persiguiendo todavía no. Ver docs/PORT_AUDIT_GML.md,
+// bloques 2 y 8.
 //
 // La sacudida de MonsterLite también es de Update, pero la del port es aún
 // la del GML (stShake, que vive en el Step de oPlayer) y se para con la nave:
@@ -563,7 +679,7 @@ static void waitingUpdate(void)
 //
 // No se congela:
 //   - con PORT_STRESS o PORT_BENCH: el arnés mide el caso peor con todo en
-//     marcha y tools/measure.sh no pulsa B, así que mide lo mismo que antes;
+//     marcha y tools/measure.sh no pulsa A, B ni C, así que mide lo mismo que antes;
 //   - con el panel del depurador de gráficos abierto (decisión del usuario):
 //     B es del depurador mientras el panel está abierto.
 // ---------------------------------------------------------------------------
@@ -596,6 +712,17 @@ static void stoppedUpdate(void)
         holdShown = TRUE;
     }
 
+    // Lo que en MonsterLite va en Update sigue: la caducidad de paquetes y
+    // monedas y la subida del paquete recogido, el giro de la nave holo
+    // inactiva, los rayos (que pueden acabar y limpiar la pantalla con el
+    // tiempo parado) y el temporizador de enemyMov (bloque 8: re-sortea el
+    // estado y el destino aunque el bicho no se mueva).
+    Enemy_tickFrozen();
+    Snake_tickFrozen();
+    Pow_tickFrozen();
+    Proj_tickFrozen();
+    addKills(MLPow_tickRays());
+    Beam_updateRays(player.e.x, player.e.y);
     HUD_update();
 }
 
@@ -603,6 +730,13 @@ static void playUpdate(u16 pad)
 {
     s16 px, py;
     s16 targetX = 0, targetY = 0;
+
+    // Thread.Sleep(100): no corre nada, ni el Update.
+    if (hitstop)
+    {
+        hitstop--;
+        return;
+    }
 
     if (timeStopped(pad))
     {
@@ -646,57 +780,60 @@ static void playUpdate(u16 pad)
 
 
     // oPlayer/Step_0: el apuntado sólo se actualiza si hay algún enemigo
-    // ("if instance_exists(oMalo)"), pero el disparo va aparte y es
-    // incondicional: sin enemigos la nave sigue disparando al último rumbo.
+    // ("if instance_exists(oMalo)"). En MonsterLite tampoco se dispara sin
+    // enemigo (ver abajo).
     {
         const bool hasTarget = closestThreat(px, py, &targetX, &targetY);
 
         if (hasTarget) Player_aim(&player, FIX16(targetX), FIX16(targetY));
 
-        // El pivote y las réplicas necesitan jugador, input y objetivo.
-        Proj_setPlayer(player.e.x, player.e.y, pad, hasTarget,
+        // El pivote, las réplicas y las bolas necesitan jugador, input y
+        // objetivo.
+        Proj_setPlayer(player.e.x, player.e.y, player.e.angle, pad, hasTarget,
                        FIX16(targetX), FIX16(targetY));
-    }
 
-    if (Player_tickFire(&player))
-    {
-        // oPlayer/Step_0: con munición dispara el arma en curso y gasta una.
+        // S/disparo.cs:32-160 (bloque 3 de MonsterLite), en FixedUpdate:
         //
-        // OJO con dónde está cada cosa en el original: el switch de las armas
-        // puede no crear nada (el PIVOT no hace nada si el pivote ya está
-        // puesto, el PARA si ya hay una bala viva), pero la MUNICIÓN y la
-        // CADENCIA se gastan igual, porque están FUERA del switch:
+        //     if (closest) {
+        //         if (shootTime > 1) shootTime -= 1;
+        //         else if (isBullets()) { switch (currentWeapon) { ... } }
+        //         else { BulletThin; shootTime = shotTimeNormal; }
+        //     }
         //
-        //     switch (global.weapon_index) { ... case 3: if !instance_exists
-        //          (oPivot) {instance_create(x,y,oPivot)} break; ... }
-        //     if (global.weapon_index == 2) controlTime = 12 else controlTime = 6;
-        //     if global.playerBulletsCounter >= 0 {global.playerBulletsCounter -= 1}
-        //
-        // El port lo tenía condicionado a que el arma hubiera creado algo, y
-        // eso ROMPÍA LA PARTIDA con el PIVOT: el pivote no se puede volver a
-        // crear, así que no se gastaba munición nunca, la munición no llegaba
-        // nunca a cero y por tanto no entraba la bala por defecto. En cuanto
-        // los tres satélites morían contra un enemigo, el jugador se quedaba
-        // SIN NINGÚN DISPARO: no podía matar, no morían cabezas, y
-        // generaMalos() no volvía a correr. El juego se quedaba vacío.
-        if (g_playerBullets > 0)
+        // Sólo cuenta y dispara si hay enemigo. Con munición dispara el arma
+        // equipada, gasta una y pone su cadencia; sin ella, la bala fina. El
+        // PIVOT y el PARA del GML entran en el mismo bucle con su cadencia
+        // del GML, y gastan aunque el arma no cree nada (el pivote ya
+        // puesto, o la bala del PARA viva), como allí.
+        if (hasTarget)
         {
-            Proj_fireWeapon(g_weaponIndex, player.e.x, player.e.y, player.e.angle);
-            g_playerBullets--;
-            player.controlTime = (g_weaponIndex == 2) ? SHOOT_INT_3WAY : SHOOT_INT_WEAPON;
-            // oPlayer/Step_0: stShake(4, 5, 0.2) tras cualquier arma
-            Shake_shot();
-        }
+            if (player.controlTime > 1)
+            {
+                player.controlTime--;
+            }
+            else if (g_playerBullets > 0)
+            {
+                static const u8 cadence[WPN_COUNT] =
+                {
+                    ML_SHOT_WBLOCK_F, ML_SHOT_LASER_F, ML_SHOT_TWAY_F,
+                    SHOOT_INT_WEAPON, SHOOT_INT_WEAPON,
+                    ML_SHOT_CIRCULAR_F, ML_SHOT_MOIRE_F
+                };
 
-        // Y a continuación, en el MISMO frame, el original comprueba nivel de
-        // munición otra vez: si acaba de quedarse a cero, también sale la bala
-        // por defecto. Portado tal cual.
-        if (g_playerBullets == 0)
-        {
-            Proj_fireThin(player.e.x, player.e.y, player.e.angle);
-            player.controlTime = SHOOT_INT_DEFAULT;
-            // oPlayer/Step_0: stShake(1, 1, 0.1)
-            Shake_thinShot();
+                Proj_fireWeapon(g_weaponIndex, player.e.x, player.e.y, player.e.angle);
+                g_playerBullets--;
+                player.controlTime = cadence[g_weaponIndex];
+                // La sacudida por disparo sigue siendo la del GML,
+                // stShake(4, 5, 0.2), hasta el bloque 12.
+                Shake_shot();
+            }
+            else
+            {
+                Proj_fireThin(player.e.x, player.e.y, player.e.angle);
+                player.controlTime = ML_SHOT_NORMAL_F;
+                // oPlayer/Step_0: stShake(1, 1, 0.1), hasta el bloque 12.
+                Shake_thinShot();
+            }
         }
     }
 
@@ -708,6 +845,18 @@ static void playUpdate(u16 pad)
         {
             switch (got.type)
             {
+                case POW_COIN:
+                    // playerMovement: CoinsManager.addCoins(coinTypeVar), al
+                    // saldo y a las monedas de esta partida, y
+                    // playPillarPaqueteClip (hasta el bloque 12, powUpSnd).
+                    g_coins += got.value;
+                    g_coinsEarned += got.value;
+                    // El saldo de Soomla se guarda al recoger cada moneda
+                    // (W/CoinsManager.cs:28-36).
+                    Save_write();
+                    Audio_sfx(SFX_POWUP);
+                    break;
+
                 case POW_PACK:
                     // oPaquete/Collision_oPlayer: powUpSnd
                     g_playerBullets += got.ammo;
@@ -718,54 +867,43 @@ static void playUpdate(u16 pad)
                     break;
 
                 case POW_BOOM:
-                    // Collision_oBoomPowUp pinta una explosión en cada oMalo y
-                    // les pone hp = 0, que NO mata a nadie: fuera del impacto
-                    // de bala ese hp no se comprueba en ninguna parte. Lo que
-                    // limpia la pantalla es el Animation End del
-                    // oExplosionCruz que crea, dos frames después
-                    // (sprExplosion son 2 frames a 1 por frame):
-                    //
-                    //   with oCorpo/oCu2/oCu1/oCabeza1/oCabeza2/oMalo
-                    //        instance_destroy()
-                    //   repeat(2) instance_create(-10, -10, oCabeza2b)
-                    //
-                    // Destruye sin pasar por checkMorte(), así que no suma
-                    // kills ni genera paquetes ni oleada, igual que el rayo, y
-                    // deja dos gusanos de tipo 2 recién nacidos.
-                    Enemy_clearAll();
-                    Snake_clearAll();
-                    Effect_spawn(player.e.x, player.e.y);
-                    // oExplosionCruz/Draw_0: el blanco al 50 % que tapa la
-                    // pantalla entera durante 60 frames.
-                    Effect_bombFlash();
-                    // oExplosionCruz/Create_0: stShake(10, 150, .6)
+                    // playerMovement.OnTriggerEnter, "bomba": Sleep(100),
+                    // playBoomClip, la salpicadura, clearEnemies() (cada
+                    // enemigo explota y suma level), sacudida grande y las
+                    // voces. La pausa va aquí después del estallido en vez de
+                    // antes: se congela con las explosiones ya puestas.
+                    hitstop = ML_POW_FREEZE_F;
+                    Audio_sfx(SFX_BOOM);
+                    Effect_spawn(got.x, got.y);
+                    addKills(MLPow_clearEnemies());
+                    // La sacudida sigue siendo la de la bomba del GML hasta el
+                    // bloque 12 (Q20).
                     Shake_cruz();
-                    Snake_spawn(SNAKE_TYPE_2);
-                    Snake_spawn(SNAKE_TYPE_2);
-                    // Collision_oBoomPowUp: aranamorteSnd + bombaSnd + risaSnd
-                    Audio_sfx(SFX_BOMBA);
-                    Audio_sfx(SFX_RISA);
-                    break;
-
-                case POW_REPLICA:
-                    // Collision_oNaveReplicaPowUp: "instance_create(other.x,
-                    // other.y, oTri)"
-                    // Collision_oNaveReplicaPowUp: repeteaSnd
-                    Proj_spawnTri(got.x, got.y);
-                    Audio_sfx(SFX_REPETEA);
                     break;
 
                 case POW_RAYS:
-                    // Collision_oRayosPowUp: "if (global.explosions)
-                    // instance_create(other.x, other.y, oRay)"
-                    // Collision_oRayosPowUp: rayosSnd
-                    Proj_fireWeapon(6, got.x, got.y, player.e.angle);
+                    // "rayoBomba": Sleep(100), un rayo a cada araña y cabeza
+                    // (rayobomba()), sacudida pequeña y la voz "RAYS". La
+                    // sacudida y la voz, las del GML hasta el bloque 12.
+                    hitstop = ML_POW_FREEZE_F;
+                    MLPow_startRays(player.e.x, player.e.y);
+                    Shake_ray();
                     Audio_sfx(SFX_RAYOS);
+                    break;
+
+                default:
                     break;
             }
 
         }
     }
+
+    // "NaveProxy": la nave toca una holo y la activa (setWorking), con la voz
+    // repetea si no lo estaba.
+    if (Proj_holoTouch(px, py)) Audio_sfx(SFX_REPETEA);
+
+    // Los rayos de MonsterLite (RayoScr.Update).
+    addKills(MLPow_tickRays());
 
     // checkMorte()/Collision_oBulletS: cada muerte suma a global.kills y sube
     // global.lastScore si lo supera.
@@ -789,18 +927,19 @@ static void playUpdate(u16 pad)
         if (g_lastScore < g_score) g_lastScore = g_score;
         g_kills += killed;
 
-        // checkMorte() del GML: cada cabeza muerta encadena morteGusano() +
-        // generaPaquete(). generaMalos() ya no: las oleadas van por tiempo.
+        // checkMorte() del GML: cada cabeza muerta encadena morteGusano().
+        // generaPaquete() ya no (bloque 4: lo que se suelta lo decide cada
+        // disparo, ver Pow_drop) y generaMalos() tampoco (las oleadas van por
+        // tiempo).
         while (snakeKills--)
         {
             // morteGusano(): puntoToHUD(1). El número volador es de 3 cifras
             // (FLYER_DIGITS): enseña las bajas, como hasta ahora, no la
             // puntuación, que pasa de 999 enseguida.
             Flyer_spawn(Snake_lastKillX(), Snake_lastKillY(), 1, g_kills);
-            generaPaquete(Snake_lastKillX(), Snake_lastKillY());
         }
 
-        checkWeapon();
+        Game_checkWeapons();
     }
 
     // levelUpgrade() corre en cada Update de gameControl.
@@ -809,8 +948,8 @@ static void playUpdate(u16 pad)
     // oMalo/Collision_oPlayer -> mataPlayer(): vale cualquier enemigo,
     // incluidos los segmentos del gusano (en MonsterLite, los tags arana,
     // snake y snakeBody de playerMovement.OnTriggerEnter). La nave es la
-    // esfera de 3,6 px de MonsterLite; los enemigos, las cajas del GML hasta
-    // el bloque 8.
+    // esfera de 3,6 px de MonsterLite contra las de los enemigos (8,4 px la
+    // araña, 9,6 px la cabeza y los eslabones, bloque 8).
     if (Enemy_collides(px, py) || Snake_collides(px, py))
     {
 #if !PORT_STRESS || defined(PORT_STRESS_MORTAL)
@@ -912,10 +1051,13 @@ void Game_update(void)
     Effect_updateAll();
     Flyer_updateAll();
 
-    // Los bichos siguen a lo suyo sin jugador: con hasPlayer a FALSE la IA
-    // no pasa a atacar (ver Entity_updateAI). En el splash no hay ninguno.
-    Enemy_updateAll(FALSE, 0, 0);
-    Snake_updateAll(FALSE, 0, 0);
+    // Los bichos siguen a lo suyo sin jugador: en ATTACK van a por una nave
+    // holo si la hay (ver enemiesNoPlayer). En el splash no hay ninguno.
+    enemiesNoPlayer();
+
+    // Los paquetes y las monedas caducan también con el menú puesto (en
+    // MonsterLite el game over no para su Update).
+    Pow_updateAll();
 
     // Splash e interludio comparten oMenu: el mismo objeto dibuja uno u otro
     // según global.isMenu.

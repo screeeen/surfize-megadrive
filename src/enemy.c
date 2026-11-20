@@ -8,6 +8,7 @@
 #include "collision.h"
 #include "hole.h"
 #include "game.h"
+#include "effect.h"
 
 typedef struct
 {
@@ -44,7 +45,7 @@ static u16 spiderWindow;
 // del frame recorre sólo lo que está vivo. Quien mata una araña la saca de la
 // lista en el acto (liveKill) para que el frame siga siendo coherente.
 // ---------------------------------------------------------------------------
-static s16 liveX[MAX_SPIDERS];      // caja ya desplazada por SPIDER_BOX_O*
+static s16 liveX[MAX_SPIDERS];      // centro de la esfera (la posición)
 static s16 liveY[MAX_SPIDERS];
 static u8  liveSlot[MAX_SPIDERS];   // ranura de enemies[] de cada entrada
 static u16 liveCount;
@@ -59,10 +60,10 @@ static void liveRebuild(void)
     {
         const Entity *e = &enemies[i].e;
 
-        if (!e->active || !e->visible) continue;
+        if (!e->active) continue;
 
-        liveX[liveCount] = F2I(e->x) + SPIDER_BOX_OX;
-        liveY[liveCount] = F2I(e->y) + SPIDER_BOX_OY;
+        liveX[liveCount] = F2I(e->x);
+        liveY[liveCount] = F2I(e->y);
         liveSlot[liveCount] = (u8)i;
         liveCount++;
     }
@@ -107,14 +108,13 @@ void Enemy_spawn(void)
         {
             const u16 h = Hole_spiderSpawn();
 
-            // oSpider/Create_0: hp = 0, speed = 0, alarm[0] = 90, visible = 0,
-            // y las coordenadas del agujero. La velocidad ya no es el velo = 3
-            // del GML sino la de MonsterLite por nivel (setSpeed, maxSpeed 1
-            // del prefab de la araña); el giro sigue siendo el del GML hasta
-            // el bloque 8.
-            Entity_spawnHidden(&enemies[i].e, Hole_x(h), Hole_y(h),
-                               Entity_mlSpeed(g_level, ML_SPIDER_MAX_MU),
-                               SPIDER_TURN, SPIDER_HP);
+            // createSpider() + enemyMov.Start(): en un agujero al azar, ya
+            // visible y en marcha (bloque 8: sin la espera de 75 f del GML),
+            // con rumbo, destino y estado al azar, la velocidad por nivel
+            // (maxSpeed 1 [prefab]) y el giro con turningSpeedMax 8 [prefab].
+            Entity_spawnML(&enemies[i].e, Hole_x(h), Hole_y(h),
+                           Entity_mlSpeed(g_level, ML_SPIDER_MAX_MU),
+                           ML_SPIDER_TURN_K_MAX, SPIDER_HP);
             enemies[i].animIndex = 0;
             hide(&enemies[i]);
         }
@@ -122,7 +122,7 @@ void Enemy_spawn(void)
     }
 }
 
-void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py)
+void Enemy_updateAll(bool hasTarget, fix16 tx, fix16 ty)
 {
     u16 i;
 
@@ -135,22 +135,10 @@ void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py)
 
         if (!s->e.active) continue;
 
-        // alarm[0]: el original sigue ejecutando la máquina de estados
-        // mientras la araña está invisible (Step_1 corre siempre); lo único
-        // que la frena es speed = 0 hasta que salta la alarma. Así que
-        // aparece ya girada hacia el jugador y con su reloj de ataque
-        // avanzado 75 frames de los 250.
-        const bool shown = Entity_tickAppear(&s->e);
-
-        Entity_updateAI(&s->e, hasPlayer, px, py,
-                        SPIDER_BOX_OX, SPIDER_BOX_OY, SPIDER_BOX_W, SPIDER_BOX_H);
-        Entity_advance(&s->e);
-
-        if (!shown)
-        {
-            hide(s);
-            continue;
-        }
+        // enemyController llama a move() desde FixedUpdate, y el Update de
+        // enemyMov lleva el temporizador. MonsterLite no hace wrap.
+        Entity_moveML(&s->e, hasTarget, tx, ty);
+        Entity_tickML(&s->e);
 
         // image_speed por defecto del sprite: 1 frame de animación por frame
         // de juego a 60 Hz, que a 50 Hz son 1.2 para que el ciclo dure lo
@@ -186,16 +174,60 @@ void Enemy_updateAll(bool hasPlayer, fix16 px, fix16 py)
     liveRebuild();
 }
 
-bool Enemy_collides(s16 cx, s16 cy)
+void Enemy_tickFrozen(void)
+{
+    u16 i;
+
+    for (i = 0; i < MAX_SPIDERS; i++)
+        if (enemies[i].e.active) Entity_tickML(&enemies[i].e);
+}
+
+bool Enemy_touchCircle(s16 cx, s16 cy, s16 r2, s16 reach)
 {
     u16 n;
 
     for (n = 0; n < liveCount; n++)
-        if (Coll_circleBox(cx, cy, ML_PLAYER_R2, ML_PLAYER_REACH,
-                           liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H))
+        if (Coll_circleCircle(cx - liveX[n], cy - liveY[n], r2, reach))
             return TRUE;
 
     return FALSE;
+}
+
+bool Enemy_collides(s16 cx, s16 cy)
+{
+    // Esfera de la nave (3,6 px) contra la de la araña (8,4 px): 12 px.
+    return Enemy_touchCircle(cx, cy, ML_PLAYER_SPIDER_R2, ML_PLAYER_SPIDER_REACH);
+}
+
+u16 Enemy_explodeAll(void)
+{
+    u16 i, n = 0;
+
+    for (i = 0; i < MAX_SPIDERS; i++)
+    {
+        EnemySlot *s = &enemies[i];
+
+        if (!s->e.active) continue;
+
+        Effect_spawnQuiet(s->e.x, s->e.y);
+        Entity_clear(&s->e);
+        hide(s);
+        n++;
+    }
+
+    liveCount = 0;
+    return n;
+}
+
+bool Enemy_slotPos(u16 slot, s16 *x, s16 *y)
+{
+    const Entity *e = &enemies[slot].e;
+
+    if (!e->active) return FALSE;
+
+    *x = F2I(e->x);
+    *y = F2I(e->y);
+    return TRUE;
 }
 
 bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY, s32 *bestIO)
@@ -204,12 +236,12 @@ bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY, s32 *bestIO)
     bool found = FALSE;
     s32 best = *bestIO;
 
+    // Desde el bloque 8 no hay arañas escondidas en su agujero: todas las
+    // vivas están en la lista.
     for (n = 0; n < liveCount; n++)
     {
-        // La caché guarda la caja; el centro que compara el original es la
-        // posición de la instancia, de ahí el desplazamiento de vuelta.
-        const s16 ex = liveX[n] - SPIDER_BOX_OX;
-        const s16 ey = liveY[n] - SPIDER_BOX_OY;
+        const s16 ex = liveX[n];
+        const s16 ey = liveY[n];
         const s16 dx = ex - x;
         const s16 dy = ey - y;
         const s32 d = (s32)(dx * dx) + (s32)(dy * dy);
@@ -220,33 +252,6 @@ bool Enemy_closest(s16 x, s16 y, s16 *outX, s16 *outY, s32 *bestIO)
             best = d;
             *outX = ex;
             *outY = ey;
-        }
-    }
-
-    // Las que todavía están ocultas en su agujero (alarm[0]) no entran en la
-    // lista de vivas, que es la de colisión, pero SÍ cuentan para apuntar:
-    // en el original son oMalo desde el Create_0 y instance_nearest no mira
-    // la visibilidad.
-    for (n = 0; n < MAX_SPIDERS; n++)
-    {
-        const Entity *e = &enemies[n].e;
-
-        if (!e->active || e->visible) continue;
-
-        {
-            const s16 ex = F2I(e->x);
-            const s16 ey = F2I(e->y);
-            const s16 dx = ex - x;
-            const s16 dy = ey - y;
-            const s32 d = (s32)(dx * dx) + (s32)(dy * dy);
-
-            if (d < best)
-            {
-                found = TRUE;
-                best = d;
-                *outX = ex;
-                *outY = ey;
-            }
         }
     }
 
@@ -264,7 +269,7 @@ bool Enemy_hit(s16 x, s16 y, s16 w, s16 h, s16 dmg, bool *killed)
     {
         EnemySlot *s;
 
-        if (!Coll_overlap(x, y, w, h, liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H)) continue;
+        if (!Coll_circleBox(liveX[n], liveY[n], ML_SPIDER_R2, ML_SPIDER_REACH, x, y, w, h)) continue;
 
         // oSpider/Collision_oBulletS: "hp = hp - 4; if hp < 0 { ... }"
         // oSpider/Collision_oDestro: "hp = hp - 1".
@@ -285,6 +290,52 @@ bool Enemy_hit(s16 x, s16 y, s16 w, s16 h, s16 dmg, bool *killed)
     return FALSE;
 }
 
+bool Enemy_hitCircle(s16 cx, s16 cy, s16 r2, s16 reach, bool *killed)
+{
+    u16 n;
+
+    *killed = FALSE;
+
+    for (n = 0; n < liveCount; n++)
+    {
+        if (!Coll_circleCircle(cx - liveX[n], cy - liveY[n], r2, reach)) continue;
+
+        // circularScr con "arana": la araña muere sin mirar su hp.
+        Enemy_killLive(n, NULL, NULL);
+        *killed = TRUE;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+s32 Enemy_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s, u16 *which)
+{
+    s32 best = -1;
+    u16 n;
+
+    for (n = 0; n < liveCount; n++)
+    {
+        const s32 d = Coll_rayCircle(liveX[n] - ox, liveY[n] - oy,
+                                     c, s, ML_X10_TO_F16(ML_SPIDER_RADIUS_X10));
+
+        if ((d >= 0) && ((best < 0) || (d < best))) { best = d; *which = n; }
+    }
+
+    return best;
+}
+
+void Enemy_killLive(u16 n, fix16 *x, fix16 *y)
+{
+    EnemySlot *s = &enemies[liveSlot[n]];
+
+    if (x) *x = s->e.x;
+    if (y) *y = s->e.y;
+    Entity_clear(&s->e);
+    hide(s);
+    liveKill(n);
+}
+
 bool Enemy_hitPoint(s16 x, s16 y, s16 dmg, bool *killed)
 {
     u16 n;
@@ -295,11 +346,10 @@ bool Enemy_hitPoint(s16 x, s16 y, s16 dmg, bool *killed)
     {
         EnemySlot *s;
 
-        // (u16)(x - caja) < ancho hace el "dentro del rango" con UNA
-        // comparación: si x queda por debajo de la caja, la resta se envuelve
-        // a un número enorme y falla igual.
-        if ((u16)(x - liveX[n]) >= (u16)SPIDER_BOX_W) continue;
-        if ((u16)(y - liveY[n]) >= (u16)SPIDER_BOX_H) continue;
+        // Punto contra la esfera de 8,4 px. El descarte por eje de
+        // Coll_circleCircle es una comparación sin signo, como antes con la
+        // caja: casi nunca llega a multiplicar.
+        if (!Coll_circleCircle(x - liveX[n], y - liveY[n], ML_SPIDER_R2, ML_SPIDER_REACH)) continue;
 
         s = &enemies[liveSlot[n]];
         s->e.hp -= dmg;
@@ -324,7 +374,7 @@ bool Enemy_damageNoKill(s16 x, s16 y, s16 w, s16 h, s16 dmg)
 
     for (n = 0; n < liveCount; n++)
     {
-        if (!Coll_overlap(x, y, w, h, liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H)) continue;
+        if (!Coll_circleBox(liveX[n], liveY[n], ML_SPIDER_R2, ML_SPIDER_REACH, x, y, w, h)) continue;
 
         enemies[liveSlot[n]].e.hp -= dmg;
         return TRUE;
@@ -342,7 +392,7 @@ u16 Enemy_damageArea(s16 x, s16 y, s16 w, s16 h)
     {
         EnemySlot *s;
 
-        if (!Coll_overlap(x, y, w, h, liveX[n], liveY[n], SPIDER_BOX_W, SPIDER_BOX_H)) continue;
+        if (!Coll_circleBox(liveX[n], liveY[n], ML_SPIDER_R2, ML_SPIDER_REACH, x, y, w, h)) continue;
 
         s = &enemies[liveSlot[n]];
         s->e.hp -= DMG_TO_SPIDER;

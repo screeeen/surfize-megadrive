@@ -37,13 +37,16 @@ extern const SpriteDefinition muerteSprite;
 extern const SpriteDefinition beamSprite;
 extern const SpriteDefinition digitSprite;
 extern const SpriteDefinition dotSprite;
+extern const SpriteDefinition coinSprite;
 extern const TileSet bgRuinsTiles;
 extern const TileSet holeTiles;
 extern const TileSet holeRedTiles;
 extern const SpriteDefinition groundSprite;
 extern const TileSet weaponTiles;
+extern const TileSet weaponMlTiles;
 extern const TileSet hudFont;
 extern const TileSet logoTiles;
+extern const Image silogoImage;
 extern const TileSet barTile;
 
 #endif // _RES_RESOURCES_H_
