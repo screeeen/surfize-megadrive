@@ -48,10 +48,21 @@
 //
 // Con las 10 holo de MonsterLite y un rayo por enemigo (hasta 11), los puntos
 // no caben si se ponen tantos como antes (6 por línea): 60 + 66 de 80 sprites
-// de hardware. Se dejan en 3 por línea y por rayo (30 + 33). Ver el
-// presupuesto en docs/PORT_AUDIT_GML.md, bloque 7.
-#define BEAM_LINE_DOTS  3       // puntos por línea a cada holo activa
+// de hardware. Los rayos se dejan en 3 por rayo (33). Ver el presupuesto en
+// docs/PORT_AUDIT_GML.md, bloque 7.
 #define BEAM_RAY_DOTS   3       // puntos por rayo
+
+// Las líneas a las holo (decisión del usuario del 2026-11-21): el grosor de
+// la estela y puntos muy juntos. Tramos de varios puntos de 2x2 a ~3 px, ya
+// dibujados en 7 direcciones (tools/ml_lineseg.py), un sprite por tramo: una
+// línea de 150 px son de 5 (horizontal) a 10 sprites. Dos topes, medidos en
+// sprites de hardware (ver src/beam.c, updateLines):
+//   - BEAM_LINE_SPRITES tramos entre todas las líneas, a partes iguales;
+//   - BEAM_LINE_BAND sprites de línea por franja de 8 líneas de pantalla: el
+//     VDP pinta 20 sprites por línea y el montador rota la tabla (y hace
+//     parpadear el juego) si una franja pasa de 20 (src/spr.c).
+#define BEAM_LINE_SPRITES 40    // tramos a la vez, entre todas las líneas
+#define BEAM_LINE_BAND    6     // sprites de línea por franja de 8 px
 
 void Beam_init(void);
 

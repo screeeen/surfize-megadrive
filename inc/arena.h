@@ -172,6 +172,27 @@
 // Oleadas 27, 31 y 36: "+2 gusanos si (int)globales.level > 5"
 #define ML_WAVE_EXTRA_LEVEL 5
 
+// ---------------------------------------------------------------------------
+// Mensajes de partida del HUD (bloque 9, S/HUD.cs y S/gameControl.cs)
+// ---------------------------------------------------------------------------
+// La oleada 27 pone globales.OLEADA = "!!!" (S/gameControl.cs:597) y el HUD
+// la borra cuando oleadaT, que empieza en 30 y baja 1 por Update mientras
+// hay texto, pasa de 0 (S/HUD.cs:172-178): se ve en el frame en que se pone
+// y en los 30 siguientes, 31 frames de 60 Hz -> 25,8 -> 26 f (en
+// docs/MONSTERLITE_GAP.md ponía 30 y 25). Corre en Update, así que sigue con
+// el tiempo parado. Si la oleada vuelve a salir con el texto puesto, oleadaT
+// no vuelve a empezar.
+#define ML_WAVE_ALERT       27
+#define ML_ALERT_F          26
+// ChangeLevelWait (S/gameControl.cs:768-779): un bucle de 3 s con
+// Time.deltaTime y un WaitForSeconds(0.1): 3,1 s de tiempo de juego = 155 f.
+// Los dos van con el tiempo escalado: con el tiempo parado (Q8) no cuentan.
+#define ML_LEVEL_MSG_F      155
+// "COINS": al recoger una moneda, CoinsManager.isAddingCoins dibuja la línea
+// más abajo durante 10 llamadas a OnGUI (S/HUD.cs:381-396), dos por frame de
+// 60 Hz -> 5 frames de Update -> 4 f. Ver src/hud.c.
+#define ML_COINS_BUMP_F     4
+
 // setMaxNumSnakes (S/enemyController.cs:217):
 //   maxNumSnakes = (level / 10) * 3 + 2   -> 2 / 5 / 8 / ...
 // Recortado al pool de gusanos del port (MAX_SNAKES, 3), que es el tope que
@@ -457,6 +478,42 @@
 // playerMovement.OnTriggerEnter, bomba y rayos: System.Threading.Thread.Sleep
 // (100) congela el juego entero 100 ms (Q17): 5 frames.
 #define ML_POW_FREEZE_F       5
+
+// ---------------------------------------------------------------------------
+// Bloque 12: hitstop, cámara lenta, sacudidas y estela
+// ---------------------------------------------------------------------------
+
+// El hitstop se cuenta en milisegundos, como el Thread.Sleep del original, y
+// se paga en frames de 20 ms (50 Hz): cada frame congelado resta 20 y el
+// resto se queda para la siguiente. Así 100 ms son 5 frames exactos y los
+// 30 ms de cada baja con bala (globales.milisecsEnemyDestroyed = 30,
+// S/globales.cs:81; llamadas en S/bulletScript.cs:62, 80 y
+// S/bulletThinSrc.cs:45, 65) salen 1 y 2 frames alternos: 1,5 de media,
+// los 30 ms justos (Q17, ver docs/PORT_AUDIT_GML.md, bloque 12).
+#define ML_FRAME_MS           20
+#define ML_KILL_FREEZE_MS     30
+#define ML_POW_FREEZE_MS      (ML_POW_FREEZE_F * ML_FRAME_MS)
+
+// Con PORT_NO_HITSTOP=1 no hay hitstop (ni por bala ni por bomba y rayos):
+// sólo para medir con tools/measure.sh el coste de CPU sin el cambio de
+// ritmo de partida que trae el hitstop.
+#ifndef PORT_NO_HITSTOP
+#define PORT_NO_HITSTOP       0
+#endif
+
+// Muerte (S/gameControl.cs:690-725): Time.timeScale = 0,2 mientras la
+// corrutina wait() hace dos WaitForSeconds(0,1) de tiempo escalado: 0,2 s de
+// juego = 1 s real = 50 frames, en los que el mundo avanza un paso de cada 5
+// (FixedUpdate a 0,02 s de juego = 0,1 s reales). Después, sacudida grande y
+// game over.
+#define ML_DEATH_SLOW_F       50
+#define ML_DEATH_SLOW_DIV     5
+
+// La estela de la nave (TrailRenderer del hijo "nave" de P/player.prefab):
+// m_Time 0,26 s = 13 f, m_MinVertexDistance 0,1 u = 2 px, ancho de 0,08 u
+// (1,6 px) a 0,001.
+#define ML_TRAIL_F            13
+#define ML_TRAIL_MIN_DIST     2
 
 // triggerSplashBomb.timerRays = 30 [prefab player]. RayoScr.Update hace
 // "timer--; if (timer < 0)": dispara en el Update 31, a 60 Hz -> 25,8 f.

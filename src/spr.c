@@ -8,11 +8,19 @@
 // porque el montador sólo recorre hasta poolCount.
 MDSpr sprPool[MDSPR_POOL + 1];
 u16   sprPoolCount;
+// Las que recorre el montador este frame: todas, o todas menos la COLA si la
+// cola está entera aparcada (ver Spr_tailBegin).
+u16   sprWalkCount;
+static u16   sprWanted;     // las pedidas, quepan o no
+static u16   tailStart, tailEnd;
+static u16   tailWalk = 0xFFFF;    // ranuras de la cola a recorrer
+static u16   tailEntries;          // sprites de la cola a la vista
 static u16   satUsed;
 
 void Spr_init(void)
 {
     sprPoolCount = 0;
+    sprWanted = 0;
     satUsed = 0;
 
     // Suelta cualquier reserva que hubiera hecho SGDK y deja la tabla limpia.
@@ -24,6 +32,7 @@ MDSpr *Spr_alloc(const SpriteDefinition *def, u16 attr)
 {
     MDSpr *s;
 
+    sprWanted++;
     s = (sprPoolCount >= MDSPR_POOL) ? &sprPool[MDSPR_POOL] : &sprPool[sprPoolCount++];
 
     s->def   = def;
@@ -36,6 +45,22 @@ MDSpr *Spr_alloc(const SpriteDefinition *def, u16 attr)
 
 u16 Spr_satUsed(void)   { return satUsed; }
 u16 Spr_allocated(void) { return sprPoolCount; }
+
+void Spr_tailBegin(void)          { tailStart = sprPoolCount; }
+void Spr_tailEnd(void)            { tailEnd = sprPoolCount; }
+void Spr_tailVisible(u16 count)    { tailWalk = count; }
+void Spr_tailEntries(u16 count)    { tailEntries = count; }
+
+void Spr_check(void)
+{
+    if (sprWanted > MDSPR_POOL)
+    {
+        char msg[40];
+
+        sprintf(msg, "SPRITES: %u de %u ranuras", sprWanted, (u16)MDSPR_POOL);
+        SYS_die(msg);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // El montador
@@ -64,7 +89,7 @@ u16 Spr_build(void)
 {
     VDPSprite *vs = vdpSpriteCache;
     const MDSpr *s = sprPool;
-    u16 left = sprPoolCount;
+    u16 left = sprWalkCount;
     u16 n = 0;
 
     while (left--)
@@ -170,10 +195,12 @@ static bool overflowing(u16 n)
 
 static u16 rotation;
 
-static void rotate(u16 n)
+static void rotate(u16 n, u16 nr)
 {
-    const u16 m = n - 1;            // entradas que rotan: de la 1 a la n-1
+    const u16 m = nr - 1;           // entradas que rotan: de la 1 a la nr-1
     u16 s;
+
+    if (m < 2) return;
 
     // Un paso que no divida al número de entradas, para que el arranque
     // recorra toda la lista y no se quede saltando entre dos sitios.
@@ -183,17 +210,24 @@ static void rotate(u16 n)
 
     s = 1 + rotation;
 
-    // 0 -> s -> ... -> n-1 -> 1 -> ... -> s-1 -> fin
+    // 0 -> s -> ... -> nr-1 -> 1 -> ... -> s-1 -> (la cola, sin rotar) -> fin
     vdpSpriteCache[0].link = s;
-    vdpSpriteCache[n - 1].link = 1;
-    vdpSpriteCache[s - 1].link = 0;
+    vdpSpriteCache[nr - 1].link = 1;
+    vdpSpriteCache[s - 1].link = (nr < n) ? nr : 0;
 }
 
 void Spr_flush(void)
 {
+    u16 n;
+
+    // La cola sólo se recorta si de verdad es lo último del pool, y sólo
+    // hasta donde diga su dueño que puede haber algo a la vista.
+    sprWalkCount = ((tailEnd == sprPoolCount) && (tailWalk < (tailEnd - tailStart)))
+                       ? (tailStart + tailWalk) : sprPoolCount;
+
     // El bucle va en ensamblador (src/spr_a.s): es el mas repetido del juego
     // y el struct esta ordenado para que la entrada se copie de un tiron.
-    u16 n = Spr_build();
+    n = Spr_build();
 
     if (n)
     {
@@ -204,13 +238,22 @@ void Spr_flush(void)
         // borde del frame, mirarla en cada frame lo tiraba: 8 kills en vez
         // de 11 a +300). Se mira uno de cada 4 frames y el resultado vale
         // para los otros tres; un atasco dura mucho más que eso.
+        //
+        // Los sprites de la cola (las líneas a las holo y los rayos) van al
+        // final de la tabla: si una franja se llena, los que se pierden son
+        // ellos, sin tocar al resto. Así que no cuentan para decidir si hay
+        // que rotar, ni rotan: contarlos hacía rotar (y parpadear) los
+        // sprites del juego por culpa de una línea. Si la tabla llegó al
+        // tope de 80 no se sabe cuántos de la cola entraron: se mira todo,
+        // como antes.
         if (n > 2)
         {
             static u8 check;
             static bool over;
+            const u16 nr = ((n < SAT_MAX_SIZE) && (tailEntries < n)) ? (n - tailEntries) : n;
 
-            if ((check++ & 3) == 0) over = overflowing(n);
-            if (over) rotate(n);
+            if ((check++ & 3) == 0) over = overflowing(nr);
+            if (over) rotate(n, nr);
         }
     }
     else

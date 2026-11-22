@@ -63,7 +63,7 @@ static void clearAll(void)
     for (r = PANEL_ROW; r < ROWS; r++) VDP_clearTextLine(r);
     for (r = 0; r < ROWS; r++) VDP_clearText(GRAPH_COL, r, 2);
     // La gráfica pisa la cola de KILLS en las filas del HUD.
-    HUD_init();
+    HUD_repaint();
     HUD_update();
 }
 

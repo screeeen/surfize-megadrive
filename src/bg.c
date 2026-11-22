@@ -48,17 +48,26 @@ static s16  coverBottom = -1;
 
 static void drawRow(u16 r)
 {
-    // El plano mide más que la pantalla (64x32 celdas contra 40x30). Las
-    // celdas que sobran se rellenan repitiendo el borde de la imagen: la
-    // sacudida de pantalla desplaza el plano unos píxeles y si no se asoma
-    // una franja del color de fondo.
-    const u16 *src = &bgDefs[bgCur].map[((r < BG_ROWS) ? r : (BG_ROWS - 1)) * BG_COLS];
+    // El plano mide más que la pantalla (64x32 celdas contra 40x30), y la
+    // sacudida grande lo desplaza hasta 80 px (10 columnas) y 60 (8 filas):
+    // lo que sobra se rellena con el otro lado de la imagen, para que asome
+    // el campo envuelto. Columnas: la 40-51 son la 0-11 (se ven al desplazar
+    // a la izquierda) y la 52-63 son la 28-39 (al desplazar a la derecha,
+    // por la vuelta del plano); con 24 columnas de sobra, cada lado envuelve
+    // exacto hasta 12. Filas: sólo sobran 2 (el plano tiene 32), así que no
+    // se puede envolver exacto en los dos sentidos: la 30 y la 31 son la 0 y
+    // la 1 (por debajo, los primeros 16 px salen bien; por encima, la vuelta
+    // del plano trae esas dos filas antes que las de abajo del campo).
+    const u16 *src = &bgDefs[bgCur].map[((r < BG_ROWS) ? r : (r - BG_ROWS)) * BG_COLS];
     u16 row[64];
     u16 c;
 
     for (c = 0; c < planeWidth; c++)
     {
-        const u16 m = src[(c < BG_COLS) ? c : (BG_COLS - 1)];
+        const u16 sc = (c < BG_COLS) ? c
+                     : (c < (BG_COLS + 12)) ? (c - BG_COLS)
+                     : (c - (64 - BG_COLS));
+        const u16 m = src[(sc < BG_COLS) ? sc : (BG_COLS - 1)];
 
         // El mapa ya trae los bits de volteo en su sitio (12 y 11), así
         // que sólo falta la línea de paleta y la base del tileset.

@@ -120,6 +120,17 @@ static u16   triTimer[MAX_PROJECTILES];
 static u16 holoN;
 // Reparte entre frames el trabajo de las holo (ver updateHolo).
 static u16 holoTick;
+// Bajas por bala (fina, gorda y la de las holo) desde la última vez que se
+// preguntó: las que congelan el juego 30 ms en MonsterLite (bloque 12).
+static u16 bulletKills;
+
+u16 Proj_takeBulletKills(void)
+{
+    const u16 n = bulletKills;
+
+    bulletKills = 0;
+    return n;
+}
 
 static void hide(u16 i)
 {
@@ -175,14 +186,16 @@ static s16 spawn(u8 type, fix16 x, fix16 y, fix16 angle, fix16 speed, u16 life)
     sprTile(projs[i].sprite, projTile[projs[i].anim]);
     place(i);
 
-    // El Create_0 de cada proyectil lanza su sonido.
+    // El sonido de cada disparo. Las armas del GML, en el Create_0 de su
+    // proyectil; las de MonsterLite, el clip de SoundManager que toca
+    // disparo.cs (bloque 12). La bala fina suena en Proj_fireThin y no aquí:
+    // la de la nave holo (disparoProxy) no suena. El TWAY, en
+    // Proj_fireWeapon: tres balas, un sonido.
     switch (type)
     {
-        case PROJ_THIN:
-        case PROJ_PARA:   Audio_sfx(SFX_SHOT);     break;   // shotSnd
-        case PROJ_WBLOCK: Audio_sfx(SFX_WBLOCK);   break;   // wBlockSnd
-        case PROJ_3WAY:   Audio_sfx(SFX_THREEWAY); break;   // threeWaySnd
-        case PROJ_BOMB:   Audio_sfx(SFX_LASER);    break;   // laserSnd
+        case PROJ_PARA:   Audio_sfx(SFX_SHOT);      break;  // shotSnd del GML
+        case PROJ_BOMB:   Audio_sfx(SFX_LASER);     break;  // laserSnd del GML
+        case PROJ_WBLOCK: Audio_sfx(SFX_ML_WBLOCK); break;  // playwBulletClip, S/disparo.cs:57
         default: break;
     }
 
@@ -317,7 +330,7 @@ void Proj_holoContact(void)
         if (Enemy_touchCircle(hx, hy, ML_HOLO_SPIDER_R2, ML_HOLO_SPIDER_REACH) ||
             Snake_headTouchCircle(hx, hy, ML_HOLO_SNAKE_R2, ML_HOLO_SNAKE_REACH))
         {
-            Effect_spawn(projs[i].x, projs[i].y);
+            Effect_spawnQuiet(projs[i].x, projs[i].y);
             hide(i);
         }
     }
@@ -398,9 +411,9 @@ static bool updateHolo(u16 i)
         (Enemy_touchCircle(hx, hy, ML_HOLO_SPIDER_R2, ML_HOLO_SPIDER_REACH) ||
          Snake_headTouchCircle(hx, hy, ML_HOLO_SNAKE_R2, ML_HOLO_SNAKE_REACH)))
     {
-        // OnExplosion: explosionBlue. El port no tiene explosión azul: la
-        // normal.
-        Effect_spawn(p->x, p->y);
+        // OnExplosion: explosionBlue, sin sonido (collideAndDie). El port no
+        // tiene explosión azul: la normal.
+        Effect_spawnQuiet(p->x, p->y);
         return FALSE;
     }
 
@@ -486,8 +499,10 @@ void Proj_clearSatellites(void)
 
 void Proj_fireThin(fix16 x, fix16 y, fix16 angle)
 {
-    // BulletThin de MonsterLite: 12 px/f (bloque 3).
+    // BulletThin de MonsterLite: 12 px/f (bloque 3), con playnBulletClip
+    // (S/disparo.cs:149).
     spawn(PROJ_THIN, x, y, angle, ML_BULLET_SPEED, 0);
+    Audio_sfx(SFX_ML_SHOT);
 }
 
 // LASER y MOIRE: el rayo de impacto y el haz (ver arriba).
@@ -499,9 +514,9 @@ static void fireBeam(fix16 x, fix16 y, fix16 angle, u16 rayF, u16 beamF, bool fo
     beamX = x;
     beamY = y;
     beamAng = angle;
-    // laserBulletClip / moireBulletClip de MonsterLite: hasta el bloque 12,
-    // el laserSnd del GML.
-    Audio_sfx(SFX_LASER);
+    // playlaserBulletClip / playmoireBulletClip (S/disparo.cs:69, 95): los
+    // dos tocan laser.wav.
+    Audio_sfx(SFX_ML_LASER);
 }
 
 bool Proj_paraAlive(void)
@@ -542,6 +557,10 @@ bool Proj_fireWeapon(u8 weaponIndex, fix16 x, fix16 y, fix16 angle)
             spawn(PROJ_3WAY, x, y, F16_normalizeAngle(angle - ML_TWAY_SPREAD), ML_BULLET_SPEED, 0);
             spawn(PROJ_3WAY, x, y, angle, ML_BULLET_SPEED, 0);
             spawn(PROJ_3WAY, x, y, F16_normalizeAngle(angle + ML_TWAY_SPREAD), ML_BULLET_SPEED, 0);
+            // playtriBulletClip, una vez por bala en el mismo frame
+            // (S/disparo.cs:115): superpuestas suenan como una, y tres
+            // llamadas ocuparían los tres canales.
+            Audio_sfx(SFX_ML_TWAY);
             return TRUE;
 
         case WPN_CIRCULAR:
@@ -557,8 +576,8 @@ bool Proj_fireWeapon(u8 weaponIndex, fix16 x, fix16 y, fix16 angle)
 
                 if (k >= 0) projs[k].orbit = a;
             }
-            // circularBulletClip: hasta el bloque 12, el shotSnd del GML.
-            Audio_sfx(SFX_SHOT);
+            // playcircularBulletClip (S/disparo.cs:129): retroUFO.wav.
+            Audio_sfx(SFX_ML_CIRCULAR);
             return TRUE;
 
         case WPN_PIVOT:     // "if !instance_exists(oPivot) instance_create(...)"
@@ -669,7 +688,8 @@ static u16 castRay(u16 *snakeKills)
         fix16 x, y;
 
         Enemy_killLive(spider, &x, &y);
-        Effect_spawn(x, y);
+        // RaycastScr.OnExplosion sólo crea la explosión: sin sonido.
+        Effect_spawnQuiet(x, y);
         Debris_burst(x, y);
         // RaycastScr.leavePow(), en la posición del enemigo.
         Pow_drop(x, y, FALSE);
@@ -680,7 +700,7 @@ static u16 castRay(u16 *snakeKills)
     if (kind == 2)
     {
         Snake_killSlot(slot);
-        Effect_spawn(Snake_lastKillX(), Snake_lastKillY());
+        Effect_spawnQuiet(Snake_lastKillX(), Snake_lastKillY());
         Debris_burst(Snake_lastKillX(), Snake_lastKillY());
         Pow_drop(Snake_lastKillX(), Snake_lastKillY(), FALSE);
         (*snakeKills)++;
@@ -715,13 +735,18 @@ static u16 hitML(u16 i, s16 bx, s16 by, u16 *snakeKills, bool *gone)
 
     if (hit)
     {
-        // circularScr sólo hace la explosión si queda menos de 2 enemigos.
-        if (!circ || ((Enemy_countAlive() + Snake_countType(SNAKE_TYPE_1) +
-                       Snake_countType(SNAKE_TYPE_2)) < 2))
-            Effect_spawn(p->x, p->y);
+        // circularScr sólo hace la explosión si queda menos de 2 enemigos,
+        // y sin sonido; las balas, OnExplosion con playBombaClip
+        // (S/bulletScript.cs:41, S/bulletThinSrc.cs:33).
+        if (!circ) { Effect_spawnQuiet(p->x, p->y); Audio_sfx(SFX_ML_XPL); }
+        else if ((Enemy_countAlive() + Snake_countType(SNAKE_TYPE_1) +
+                  Snake_countType(SNAKE_TYPE_2)) < 2)
+            Effect_spawnQuiet(p->x, p->y);
         *gone = TRUE;
         if (killed)
         {
+            // Thread.Sleep(30) en cada baja por bala (Q17), no con la bola.
+            if (!circ) bulletKills++;
             Debris_burst(p->x, p->y);
             // leavePow() en la posición de la bala; la bola contra una araña
             // suelta siempre paquete (circularScr).
@@ -740,14 +765,17 @@ static u16 hitML(u16 i, s16 bx, s16 by, u16 *snakeKills, bool *gone)
 
     if (hit)
     {
-        if (!circ || ((Enemy_countAlive() + Snake_countType(SNAKE_TYPE_1) +
-                       Snake_countType(SNAKE_TYPE_2)) < 2))
-            Effect_spawn(p->x, p->y);
+        // OnExplosion en todo impacto contra la cabeza, mate o no.
+        if (!circ) { Effect_spawnQuiet(p->x, p->y); Audio_sfx(SFX_ML_XPL); }
+        else if ((Enemy_countAlive() + Snake_countType(SNAKE_TYPE_1) +
+                  Snake_countType(SNAKE_TYPE_2)) < 2)
+            Effect_spawnQuiet(p->x, p->y);
 
         if (thin || circ || killed) *gone = TRUE;
 
         if (killed)
         {
+            if (!circ) bulletKills++;
             (*snakeKills)++;
             // A petición del autor la metralla sale en TODA muerte causada
             // por un disparo (ver la nota del GML más abajo).
@@ -784,6 +812,9 @@ static bool updateBall(u16 i)
         found = Enemy_closest(bx, by, &tx, &ty, &best);
         if (Snake_closestHead(bx, by, &tx, &ty, &best)) found = TRUE;
         if (!found) return FALSE;
+
+        // shakeSmall(3) en cada frame que persigue (S/circularScr.cs:59).
+        Shake_small(ML_SHAKE_CIRC_F);
 
         // MoveTowards: si está a menos de un paso, llega.
         if (best <= (ML_CIRC_SPEED * ML_CIRC_SPEED))

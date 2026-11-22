@@ -3,6 +3,11 @@
 s16 g_shakeX;
 s16 g_shakeY;
 
+// MonsterLite: frames que le quedan a cada corrutina.
+static u16   bigLeft;
+static u16   smallLeft;
+
+// GML: stShake.
 static s16   shTime;
 static fix16 shMag;
 static fix16 shFade;
@@ -31,6 +36,22 @@ static void apply(void)
     VDP_setVerticalScrollVSync(BG_B, g_shakeY);
 }
 
+// Random.Range(-m, m) con floats: aquí un entero uniforme de -m a m.
+static s16 rnd(s16 m)
+{
+    return (s16)(random() % (u16)((2 * m) + 1)) - m;
+}
+
+void Shake_big(u16 frames)
+{
+    if (bigLeft < frames) bigLeft = frames;
+}
+
+void Shake_small(u16 frames)
+{
+    if (smallLeft < frames) smallLeft = frames;
+}
+
 void Shake_start(u16 time, fix16 magnitude, fix16 fade)
 {
     // stShake no mira si ya hay una sacudida en curso: la sustituye, aunque la
@@ -41,8 +62,15 @@ void Shake_start(u16 time, fix16 magnitude, fix16 fade)
     shActive = TRUE;
 }
 
+bool Shake_active(void)
+{
+    return (bigLeft | smallLeft | shActive | g_shakeX | g_shakeY) != 0;
+}
+
 void Shake_stop(void)
 {
+    bigLeft = 0;
+    smallLeft = 0;
     shActive = FALSE;
 
     if (g_shakeX | g_shakeY)
@@ -53,9 +81,10 @@ void Shake_stop(void)
     }
 }
 
-void Shake_update(void)
+// stShake del GML, un frame. FALSE si no hay ninguna en marcha.
+static bool gmlStep(void)
 {
-    if (!shActive) return;
+    if (!shActive) return FALSE;
 
     shTime--;
 
@@ -70,8 +99,6 @@ void Shake_update(void)
         g_shakeY = (r & 2) ? m : -m;
     }
 
-    apply();
-
     // La magnitud no baja hasta que se agota el tiempo.
     if (shTime <= 0)
     {
@@ -79,10 +106,48 @@ void Shake_update(void)
 
         if (shMag <= 0)
         {
-            g_shakeX = 0;
-            g_shakeY = 0;
-            apply();
             shActive = FALSE;
+            return FALSE;
         }
+    }
+
+    return TRUE;
+}
+
+void Shake_update(void)
+{
+    if (bigLeft)
+    {
+        bigLeft--;
+        g_shakeX = rnd(ML_SHAKE_BIG_X);
+        g_shakeY = rnd(ML_SHAKE_BIG_Y);
+        // La del GML sigue contando por debajo, como si fueran dos cámaras.
+        if (shActive) { const s16 x = g_shakeX, y = g_shakeY; gmlStep(); g_shakeX = x; g_shakeY = y; }
+        apply();
+        return;
+    }
+
+    if (smallLeft)
+    {
+        smallLeft--;
+        g_shakeX = rnd(ML_SHAKE_SMALL);
+        g_shakeY = rnd(ML_SHAKE_SMALL);
+        if (shActive) { const s16 x = g_shakeX, y = g_shakeY; gmlStep(); g_shakeX = x; g_shakeY = y; }
+        apply();
+        return;
+    }
+
+    if (gmlStep())
+    {
+        apply();
+        return;
+    }
+
+    // Al acabar, la cámara vuelve a (0, 0): una escritura y ya.
+    if (g_shakeX | g_shakeY)
+    {
+        g_shakeX = 0;
+        g_shakeY = 0;
+        apply();
     }
 }

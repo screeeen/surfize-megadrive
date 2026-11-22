@@ -39,6 +39,12 @@ void Effect_death(fix16 x, fix16 y);
 bool Effect_deathActive(void);
 
 void Effect_updateAll(void);
+// Las dos mitades de Effect_updateAll, para la cámara lenta de la muerte
+// (bloque 12): el fogonazo de oMuerte, que es del GML y va a su ritmo, y el
+// resto (explosiones, humareda y el blancazo de la bomba), que se frena con
+// el mundo.
+void Effect_updateDeath(void);
+void Effect_updateWorld(void);
 void Effect_clearAll(void);
 
 // oExplosionCruz: la pantalla entera a medio camino del blanco durante 60

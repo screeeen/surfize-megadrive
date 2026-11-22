@@ -57,3 +57,54 @@ Respuestas a las preguntas abiertas de `docs/MONSTERLITE_GAP.md` §6. Mandan sob
 |---|---|
 | Nave holo inactiva | **También muere cuando la toca una araña o una cabeza**, como en MonsterLite: `collideAndDie` sólo se habilita al activarla, pero Unity manda `OnTriggerEnter` también a los componentes desactivados. Mismos radios y misma explosión que la activa, en partida y fuera de ella. |
 | Seguimiento de los eslabones del gusano | **Se mantienen las migas de 8 px de MonsterLite** (`segmentSpacing` 0,4 u) en lugar del `stepdelay` del GML. Los gusanos siguen siendo los dos del GML con 12 y 10 eslabones (Q2); la decisión 4 queda en "longitud fiel" en número de eslabones. |
+
+## Decisiones del 2026-11-20 (bloque 9)
+
+| Tema | Decisión |
+|---|---|
+| Fondo por nivel (Q16) | **No se porta `setCameraLevelColor`**: se queda la imagen de ruinas sin color por nivel. |
+| Deslizamiento del HUD | **El HUD entra y sale deslizándose como en MonsterLite** (en el port, a escalones de una fila de 8 px). |
+| Sombra | **Todas las fuentes llevan sombra** (la grande, la del sistema y las demás del HUD, los mensajes, los menús y las pantallas), **pintada en los tiles de la fuente**, sin segunda capa ni escrituras por frame. Sin sacrificar nada visible por VRAM. |
+| Línea de arriba | **`BULLETS<n> <n>SCORE`**: la cifra de las balas pegada a BULLETS y la de la puntuación pegada a SCORE, alineada a la derecha; **SCORE del mismo tamaño que BULLETS** (fuente grande; las letras que falten, creadas con el mismo estilo). |
+| Posición de "!!!" (**Q22**) | **Centrado, como estaba, pero un poco más arriba** para que la nave, que nace en (160, 120), no lo tape: fila 12 (96-103 px). |
+
+## Decisiones del 2026-11-20 (guardado)
+
+| Tema | Decisión |
+|---|---|
+| Guardado (**sustituye al progreso en SRAM** y al bloque 6) | **El juego no usa SRAM.** Récord, saldo, armas compradas, arma equipada, sonido y música se guardan sólo en RAM y se pierden al apagar; al encender, los valores de una partida nueva. La cabecera del cartucho no declara SRAM. |
+
+## Decisiones del 2026-11-21 (guardado)
+
+| Tema | Decisión |
+|---|---|
+| Botón RESET | **Reiniciar es lo mismo que apagar y encender**: récord, saldo, armas compradas, arma equipada, munición, sonido y música vuelven a los valores por defecto. |
+| Tutorial "la primera vez" (bloque 11, **Q19**) | Sin SRAM, "la primera vez" quiere decir **desde que se enciende la consola** (o desde un RESET): el tutorial vuelve a salir en cada encendido y tras cada RESET. |
+
+## Decisiones del 2026-11-21 (logros, bloque 10)
+
+| Tema | Decisión |
+|---|---|
+| Recompensas de los logros (**cierra Q18**) | **17 logros**, cada uno con monedas que se suman al saldo al conseguirlo. PROGRESO: primera partida (terminar una) 50; llegar al nivel 5, 10 y 15: 100, 500 y 2000; puntuación 100, 1000 y 10 000: 100, 300 y 1000. TIENDA: comprar LASER 600, TWAY 1200, CIRCULAR 2400 y MOIRE 4800 (WBLOCK viene comprada); recoger 1000 y 10 000 monedas en total: 100 y 1000. POWER-UPS: usar una bomba 100, usar unos rayos 100, activar una nave holo 100, matar 10 enemigos con una sola bomba 500. (La propuesta decía 18 por error: son 17.) |
+| Qué cuenta cada uno | "Recoger monedas en total": sólo las cogidas en partida (ni las de recompensa ni el saldo), en un contador `u32` acumulado entre partidas. "Usar una bomba / unos rayos": el power-up se dispara. "10 enemigos con una sola bomba": las bajas de una misma detonación. "Activar una nave holo": recogerla o activarla. |
+| Dónde viven | **En RAM**: una máscara de bits y los contadores. Se pierden al apagar o con RESET; sin SRAM. |
+| Qué es invención | Todo: MonsterLite no define logros. Va marcado en la tabla de divergencias de `docs/PORT_AUDIT_GML.md`. |
+
+## Decisiones del 2026-11-21 (bloque 12)
+
+| Tema | Decisión |
+|---|---|
+| Orden de los bloques | **El bloque 12 (efectos y sonido) va antes que el 11** (tutorial). |
+| Q17, Q20, Q15 en el bloque 12 | Las de 2026-11-15, sin cambios. |
+| **Q21 revocada: música** | **No se convierten las pistas `.xm`**, ni en el bloque 12 ni después. **En partida no hay música**; en el menú y el game over sigue la del GML (`musMenu`). El estudio que se hizo queda descartado (`docs/PORT_AUDIT_GML.md`, bloque 12). Sustituye a Q21 del 2026-11-15. |
+| Líneas a las naves holo | **El mismo grosor que la estela de la nave**, con **puntos muy juntos que formen una línea**. Implementado con el punto de 2×2 de la estela en azul, uno cada 3 px como mínimo; como cada punto es un sprite (80 por frame, 20 por línea de pantalla), hay dos topes del desarrollador: 40 puntos entre todas las líneas y 6 por franja de 8 px. Las líneas casi horizontales y las de muchas holo salen más separadas; el detalle, en `docs/PORT_AUDIT_GML.md`, bloque 12. |
+| Líneas a las naves holo a 3 px en cualquier dirección | **Se quitan tiles al fondo** (`VTILE_SHARED_TILES` de 528 a 504) para dibujar las líneas con **tramos de varios puntos de 2×2 ya dibujados en 7 direcciones** (24 tiles): ~3 px (2,8-3,6) en cualquier dirección. Sustituye a la fila anterior. |
+| Sonido de la muerte | **Se quita el `morteSnd` del GML**: en MonsterLite la muerte no suena. |
+| PCM del GML sin uso | **Se borran** de `res/resources.res` y de `res/sound/`: `sfxWBlock`, `sfxThreeWay`, `sfxCircular`, `sfxBomba`, `sfxRayos`, `sfxPowUp`, `sfxRepetea`, `sfxRisa` y `sfxMorte`. |
+
+## Decisiones del 2026-11-22 (bloque 12)
+
+| Tema | Decisión |
+|---|---|
+| Coste de las líneas a las naves holo | **Las líneas no deben notarse en el rendimiento**: con 10 holo, la diferencia con y sin líneas, dentro del ruido (±2 %), y el caso normal sin empeorar. Implementado guardando lo hecho de un frame al siguiente y rehaciendo 2 líneas por frame cuando se mueve la nave (`docs/PORT_AUDIT_GML.md`, bloque 12, tercera entrega): −2,2 % con la nave quieta (el arnés de medida) y −9 % moviéndose. Se mantienen el grosor de la estela, los puntos a ~3 px y los topes por línea de pantalla. |
+| Explosión de la muerte | **El usuario la prefería como antes del bloque 12** (con su destello blanco y la sacudida). Comparada frame a frame con HEAD, el destello blanco es igual y en HEAD no había sacudida (se cortaba en el mismo frame): no se ha cambiado nada. **Pendiente de que el usuario elija**: dejarla así, poner la sacudida del GML a cámara lenta, o volver a la muerte de HEAD sin cámara lenta (`docs/PORT_AUDIT_GML.md`, bloque 12, tercera entrega). |

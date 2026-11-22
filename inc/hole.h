@@ -73,17 +73,41 @@ s32 Hole_rayFirst(s16 ox, s16 oy, fix16 c, fix16 s);
 // sobre los agujeros (el logo, ver src/menu.c).
 bool Hole_cellPixels(s16 col, s16 row, u32 *buf);
 
-// Texto de la fuente del sistema encima de los agujeros sin cortarlos: en
-// buf (una fila del plano A ya rellena con Hole_rowTiles) pone las letras de
-// 's' desde 'col'; las que caen sobre dibujo de agujero van en un tile
-// compuesto (agujero debajo, letra encima). Los espacios dejan lo que hubiera.
-void Hole_textRow(const char *s, u16 col, s16 row, u16 *buf, u16 cols);
-
-// Lo mismo, escribiendo la fila entera (40 columnas) en el plano A de una
-// vez, y su contrario: la fila con sólo los agujeros.
+// Texto de la fuente del sistema encima de los agujeros sin cortarlos: la
+// fila 'row' del plano A pasa a tener sólo los agujeros y 's' desde 'col';
+// las letras que caen sobre dibujo de agujero van en un tile compuesto
+// (agujero debajo, letra encima). La fila queda apuntada: si un agujero suyo
+// cambia de variante, la letra se vuelve a componer (ver src/hole.c). Volver
+// a llamarla con la misma fila sustituye el texto entero.
 void Hole_drawTextRow(const char *s, u16 col, s16 row);
+
+// La fila con sólo los agujeros, y deja de estar apuntada.
 void Hole_clearTextRow(s16 row);
 
+// La fila con sólo los agujeros, pero se guardan sus tiles compuestos: si
+// el mismo texto vuelve (Hole_drawTextRow), las letras que caen igual sobre
+// los mismos agujeros no se recomponen. Para los mensajes que van y vienen.
+void Hole_hideTextRow(s16 row);
+// Igual, pero por la cola de DMA: para quien escribe la fila también por la
+// cola en el mismo frame (el HUD al deslizarse).
+void Hole_hideTextRowQueued(s16 row);
 
+// La sombra de la fuente del sistema va pintada en sus tiles con este índice
+// de PAL0 (negro, lo pone el HUD). Ver src/hole.c, "Sombra".
+#define TEXT_SHADOW_IDX 12
+
+// El plano se ha repuesto entero, sólo con agujeros (Menu_leave): todas las
+// filas apuntadas pasan a ocultas, sin pintar nada.
+void Hole_forgetText(void);
+
+// Algo ha escrito encima de las filas apuntadas por su cuenta (el depurador
+// de gráficos): las que están a la vista se vuelven a escribir enteras.
+void Hole_textTouched(void);
+
+// Compone lo pendiente de Hole_drawTextRow y encola su subida (tiles y
+// fila) para el vblank (ver src/hole.c). Una vez por frame, en todos los
+// estados, después de todo lo que escribe en el plano A: un texto sale en el
+// vblank del mismo frame en que se pide.
+void Hole_textUpdate(void);
 
 #endif

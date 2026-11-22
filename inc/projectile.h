@@ -48,6 +48,12 @@ void Proj_fireThin(fix16 x, fix16 y, fix16 angle);
 // muertes de este frame y deja en *snakeKills las que eran cabezas.
 u16 Proj_update(u16 *snakeKills);
 
+// Las bajas por bala (BulletThin y Bullet de MonsterLite, también las de la
+// nave holo) desde la última llamada, y pone la cuenta a cero. Cada una
+// congela el juego 30 ms (Q17, bloque 12). LASER, MOIRE, CIRCULAR, la
+// metralla, las armas del GML, la bomba y los rayos no cuentan.
+u16 Proj_takeBulletKills(void);
+
 // TRUE si hay un oBulletPara vivo: el original sólo permite uno
 // ("if !instance_exists(oBulletPara)").
 bool Proj_paraAlive(void);

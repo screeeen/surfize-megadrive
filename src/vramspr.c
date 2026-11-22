@@ -63,6 +63,18 @@ u16 VTile_used(void)
     return nextTile - TILE_USER_INDEX;
 }
 
+void VTile_read(u16 index, u32 *dst)
+{
+    vu32 *ctrl = (vu32 *)VDP_CTRL_PORT;
+    vu32 *data = (vu32 *)VDP_DATA_PORT;
+    u16 w;
+
+    SYS_disableInts();
+    *ctrl = VDP_READ_VRAM_ADDR((u32)index * 32);
+    for (w = 0; w < 8; w++) dst[w] = *data;
+    SYS_enableInts();
+}
+
 u16 VTile_shared(void)
 {
     static u16 sharedBase;

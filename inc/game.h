@@ -20,7 +20,8 @@ typedef enum
 {
     GAME_SPLASH = 0,    // global.started sin partida jugada: pantalla inicial
     GAME_PLAY,
-    GAME_MENU           // global.isMenu: interludio tras morir
+    GAME_MENU,          // global.isMenu: interludio tras morir
+    GAME_DYING          // bloque 12: la cámara lenta de la muerte y su sacudida
 } GameState;
 
 // Puntuación y niveles de MonsterLite (bloque 1, docs/MONSTERLITE_GAP.md
@@ -50,9 +51,9 @@ extern u16 g_playerBullets;
 extern u16 g_weaponIndex;
 extern u16 g_ammo[];
 
-// Monedas (CoinsManager de MonsterLite, bloque 4): el saldo, que se gastará
-// en la tienda (bloque 5) y se guardará en SRAM (bloque 6), y las de esta
-// partida (earnedCoins), que enseñará el game over.
+// Monedas (CoinsManager de MonsterLite, bloque 4): el saldo, que se gasta en
+// la tienda (bloque 5) y dura hasta apagar la consola (sin SRAM), y las de
+// esta partida (earnedCoins), que enseña el game over.
 extern u32 g_coins;
 extern u32 g_coinsEarned;
 

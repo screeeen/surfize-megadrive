@@ -40,6 +40,18 @@ static void videoInit(void)
 
 int main(bool hardReset)
 {
+    // Botón RESET de la consola (reinicio en caliente): SGDK entra por
+    // _reset_entry, que no borra la RAM ni vuelve a copiar .data. Las
+    // variables globales y estáticas siguen con lo que tenían (nextTile de
+    // src/vramspr.c seguiría contando y VTile_check pararía el juego; saldo,
+    // armas, munición, sonido y música no volverían a sus valores) y el juego
+    // da por hecho en todas partes que arranca con la RAM recién puesta.
+    // SYS_hardReset reinicia por _start_entry, que borra la RAM y carga .data
+    // como al encender, y vuelve a llamar a main con hardReset a TRUE. Sin
+    // SRAM, RESET es lo mismo que apagar y encender (decisión del usuario del
+    // 2026-11-21).
+    if (!hardReset) SYS_hardReset();
+
     videoInit();
 
     // El motor de sprites de SGDK no se usa: los tiles se precargan en VRAM
@@ -87,6 +99,8 @@ int main(bool hardReset)
     while (TRUE)
     {
         Game_update();
+        // Lo que se ha escrito encima de los agujeros (ver src/hole.c).
+        Hole_textUpdate();
 
         PROF_START(PROF_SPRUPDATE);
         Spr_flush();

@@ -85,12 +85,22 @@ u16 VTile_allocSpare(u16 count);
 // el juego si algo se pasa (ver VTile_check).
 // 528 desde el 2026-11-15: arañas, fogonazo de la muerte y los dos últimos
 // eslabones de los gusanos pasaron a VStream y dejaron 305 libres (queda 1).
-#define VTILE_SHARED_TILES 528
+// 504 desde el 2026-11-21 (bloque 12, decisión del usuario): los 24 tiles de
+// los tramos de las líneas a las naves holo (tools/ml_lineseg.py) salen del
+// fondo. Ver docs/PORT_AUDIT_GML.md, bloque 12.
+#define VTILE_SHARED_TILES 504
 
 u16 VTile_shared(void);
 
 // Cuántos tiles de usuario se han repartido: para el presupuesto.
 u16 VTile_used(void);
+
+// Lee de la VRAM el tile 'index' (8 palabras largas, 4 bits por píxel).
+// Sirve para componer encima de lo que ya hay subido (la fuente del sistema,
+// que en la ROM va comprimida, o un tile de los agujeros). Por el puerto de
+// datos y con las interrupciones cortadas: es lento (~200 ciclos) y no se
+// usa en el bucle salvo cuando cambia un texto.
+void VTile_read(u16 index, u32 *dst);
 
 // Para el juego con un mensaje si lo repartido se sale del espacio de tiles:
 // VTile_alloc no comprueba nada, y pasarse escribe encima del mapa del plano

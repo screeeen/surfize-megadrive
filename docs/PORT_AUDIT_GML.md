@@ -2244,13 +2244,13 @@ Desde el 2026-11-15 la fuente de verdad es **MonsterLite** (Unity, C#); el GML p
 | 3. Armas y munición | ✅ hecho (2026-11-16); la compra queda para los bloques 4-5 (hasta entonces las cinco armas de MonsterLite están disponibles) |
 | 4. Economía en partida | ✅ hecho (2026-11-16) |
 | 5. Pantallas | ✅ hecho (2026-11-16), con el logo de Screen Implosion convertido de MonsterLite |
-| 6. Guardado en SRAM | ✅ hecho (2026-11-16) |
+| 6. Guardado en SRAM | ✅ hecho (2026-11-16); **retirado el 2026-11-21** por decisión del usuario (2026-11-20): sin SRAM, el progreso vive en RAM hasta apagar (ver "Sin SRAM") |
 | 7. Power-ups | ✅ hecho (2026-11-17) |
 | 8. Enemigos (IA, gusano) | ✅ hecho (2026-11-20), con las migas de 8 px por decisión del usuario, los dos arreglos de la verificación y la holo inactiva que muere al contacto (decisión del usuario) |
-| 9. HUD, mensajes y fondo por nivel | ⏳ pendiente (Q16) |
-| 10. Logros | ⏳ pendiente (Q18) |
+| 9. HUD, mensajes y fondo por nivel | ✅ hecho (2026-11-20), con el deslizamiento, la sombra en todas las fuentes y SCORE en grande que pidió el usuario; el color de fondo por nivel no se porta (Q16); Q22 resuelta ("!!!" en la fila 12); pregunta abierta: balas que no caben junto a la puntuación (Q23) |
+| 10. Logros | ✅ hecho (2026-11-21), con la lista y las recompensas del usuario (Q18 cerrada). Todo invención: MonsterLite no tiene logros |
 | 11. Tutorial | ⏳ pendiente (Q19) |
-| 12. Efectos y sonido | ⏳ pendiente (Q17, Q20, Q21) |
+| 12. Efectos y sonido | ✅ hecho (2026-11-21), con las correcciones de la verificación y las decisiones del usuario del mismo día: líneas holo en tramos de puntos (fondo de 504 tiles), fuera la muerte del GML y los PCM sin uso, y sin música en partida (Q21 revocada) |
 
 ### Bloque 1: estructura de partida
 
@@ -2287,6 +2287,26 @@ Un cuarto gusano además **no cabe en VRAM**: arranca con `VRAM: 1436 de 1425 ti
 
 **Rendimiento del bloque.** `tools/measure.sh`, antes 478/600 vueltas y 23 bajas; después **540/600 y 17 bajas**. No es una optimización: el arnés llena la arena con 3 gusanos al empezar, pero ahora las oleadas sólo la rellenan hasta el tope de MonsterLite del nivel en curso (2 hasta el nivel 9) en vez de hasta 3, y los primeros 40 f no hay nave que dispare. Con el tope forzado a 3, como del nivel 10 en adelante, sale 484/600 y 21 bajas: el mismo coste que antes (478) con la misma población. Las bajas no se pueden comparar entre builds: cambian las oleadas, la velocidad de los enemigos y el arranque.
 
+**Deslizamiento, sombra y SCORE en grande (decisión del usuario, 2026-11-20).** Comprobado:
+
+- **Entrada** (ROM normal, capturas frame a frame): nada en los frames 31-33; UPGRADE AT asoma en la fila 0 hacia el 34; el grupo baja una fila por frame y queda en su sitio en el 39. ARENA! (fuera del grupo) se va a los 25.
+- **Salida** (ROM normal, manteniendo B hasta morir; `slideY` por RAM): baja 15 octavos de píxel por frame (1,875 px/f) y el grupo sale en 5 escalones en **18 f**: `slideY >> 6` redondea hacia abajo, así que en el primer frame ya sube una fila y la fila 4 se va a los 17,1 f. Es fiel a MonsterLite, donde el contenido del grupo acaba a ~33 px de la parte de arriba (lo calculó el verificador); COINS y los mensajes se quitan al entrar en el game over.
+- **Tienda y vuelta**: al abrirla el HUD se quita y las minúsculas de la tienda salen bien (con su sombra); PLAY desde la tienda empieza otra partida con el HUD entrando otra vez.
+- **Línea de arriba**, en PAL y en NTSC (BlastEm con `-r U`): "BULLETS7 42SCORE", "BULLETS5 1234SCORE", "BULLETS9 123456SCORE" (35 balas recortadas, Q23), "BULLETS9 999999SCORE".
+- **Por qué el usuario no veía SCORE.** En el HEAD y en la primera entrega era la fuente del sistema, de 8 px, en la fila de abajo de las cifras, y con el panel de `GFXDEBUG=1` abierto la gráfica del depurador pisa las columnas 38-39 de todas las filas. En las capturas con la configuración de BlastEm del usuario (la misma que usa `tools/mdrun.py`, con su recorte de bordes) se veía, pero pequeña al lado de los glifos de 16 px. Ahora es de la fuente grande.
+- **Un fallo del compilador.** Con `bigAttr[(u8)c & 0x7F]`, GCC 16 a `-O3` leía el carácter de `shownS[]` con un `and.l` de 32 bits en una dirección impar (`shownS + 5`) y el 68000 paraba con ADDRESS ERROR al primer cambio de puntuación. Sin la máscara (tabla de 256) lee byte a byte; revisado en el desensamblado de toda la ROM que no queda ningún acceso de palabra a una dirección impar de la RAM.
+
+**La medida depende de la SRAM de BlastEm (encontrado al cerrar el bloque).** `tools/measure.sh` arranca un `rom.bin` y BlastEm guarda la SRAM por nombre de ROM (`~/.local/share/blastem/rom/save.sram`): la comparten todas las pruebas de `out/rom.bin`. Al arrancar, el juego carga de ahí el arma equipada, el récord y el saldo (bloque 6), así que el arnés juega con el arma que dejara la última prueba. Las pruebas de la tienda de este bloque la dejaron en WBLOCK (antes LASER): con eso `measure.sh` pasó de 509/37 a **505/34**, y el HEAD de **508/37 a 508/34** (las bajas cambian: es otra escena). No he tocado ese fichero (no tengo permiso, y es del usuario). Para comparar en condiciones fijas, una copia de `measure.sh` en el scratchpad que no lee ni escribe la SRAM y fija arma, récord (780) y saldo (1550):
+
+| Escena fija | HEAD | Bloque 9 |
+|---|---|---|
+| LASER (la de la referencia 508/37 y 509/37) | 509 / 37 | **510 / 37** |
+| WBLOCK (la que deja ahora la SRAM) | 508 / 34 | **505 / 34** |
+| WBLOCK, sin el mensaje de nivel | — | 508 / 34 |
+| WBLOCK, sin HUD ni texto | 518 / 35 | 521 / 35 |
+
+Con WBLOCK, las 3 vueltas que se pierden son del mensaje de nivel (5 subidas en 600 frames del arnés: el frame que sube de nivel compone sus filas encima de las bajas). Se probaron sin ganancia: componer una fila por frame (505, y 509 en LASER) y guardar los agujeros de cada fila de texto para no recalcularlos (se queda, no cuesta: `textUnder`). Sin HUD ni texto el bloque 9 va 3 vueltas por delante del HEAD. Para que `measure.sh` vuelva a medir la escena de la referencia basta equipar LASER en la tienda (GEAR) con `out/rom.bin`; para que no vuelva a pasar, `measure.sh` podría fijar la partida como la copia del scratchpad (propuesta, no hecha). **Resuelto el 2026-11-21** al quitar la SRAM (ver "Sin SRAM"): el juego ya no lee nada de `save.sram`, así que `measure.sh` mide siempre la escena de encender (WBLOCK, récord y saldo a 0): **505/34**.
+
 **Divergencias que introduce este bloque:**
 
 | Qué | Por qué | Consecuencia en juego |
@@ -2296,11 +2316,11 @@ Un cuarto gusano además **no cabe en VRAM**: arranca con `VRAM: 1436 de 1425 ti
 | Tope de 8 arañas; MonsterLite no tiene | Decisión del usuario (Q4); el pool de 8 ya existía | Las oleadas que piden araña con 8 vivas no crean nada |
 | El tipo de gusano se elige con el orden de `generaMalos()` del GML | MonsterLite tiene un solo gusano (Q2, decisión 4) | En los niveles 1-9 sólo salen gusanos de 12 eslabones |
 | Las oleadas de power-ups (3, 4, 6, 16, 19-21) no crean nada todavía | Son del bloque 7 | De momento la bomba, los rayos y las réplicas siguen saliendo por `generaPaquete()` del GML al morir cada cabeza |
-| La oleada 27 no enseña "!!!" | Es del bloque 9 | — |
+| La oleada 27 no enseña "!!!" | Es del bloque 9 | **Resuelto en el bloque 9** |
 | La metralla del GML (`oDestro`) también puntúa `level` | No existe en MonsterLite; con la regla de Q5 toda baja suma `level` | — |
 | La nave aparece en el centro del GML, no en (160, 69) | Es del bloque 2 (Q6) | Resuelto en el bloque 2: nace en (160, 17), ver abajo. Revertido el 2026-11-16: vuelve al centro, (160, 120) |
 | Giro, IA, aparición de 75 f y hp siguen siendo del GML | Son del bloque 8 | El enemigo va a la velocidad de MonsterLite pero gira como en el GML. Los eslabones del gusano siguen separados por `stepdelay` frames, así que a la velocidad del nivel 9 (hasta 3,92 px/f) quedan más separados que antes (hasta ~24 px); las migas de MonsterLite, cada 8 px, son del bloque 8 **Resuelto en el bloque 8** (IA, giro, aparición inmediata y migas cada 8 px; el hp de MonsterLite ya venía del bloque 3). |
-| HUD provisional: cifras grandes sin la palabra SCORE en grande, y "LV / UP / LAST / SCORE" con la fuente del sistema | La fuente grande no tiene C ni R; el HUD definitivo es el bloque 9 (Q16) | Se lee mal sobre los fondos con mucho detalle, igual que el LAST de antes. LAST pasa a ser la mejor puntuación de la sesión |
+| HUD provisional: cifras grandes sin la palabra SCORE en grande, y "LV / UP / LAST / SCORE" con la fuente del sistema | La fuente grande no tiene C ni R; el HUD definitivo es el bloque 9 (Q16) | Se lee mal sobre los fondos con mucho detalle, igual que el LAST de antes. LAST pasa a ser la mejor puntuación de la sesión. **Resuelto en el bloque 9**: HUD de MonsterLite (SCORE, BEST, LEVEL, UPGRADE AT); LAST desaparece del HUD |
 | La cuenta de bajas (`g_kills`) sigue existiendo aparte de la puntuación | La usan el desbloqueo por récord de las armas del GML (40/60/80/100), que según Q9 **convive** con la tienda de MonsterLite y se queda, y el interludio KILLS/TOP hasta el bloque 5 | El interludio y el número volador de la cabeza enseñan bajas, no puntuación |
 
 ### Bloque 1: dos correcciones tras la verificación (2026-11-15)
@@ -2526,7 +2546,7 @@ Referencia: 533/15 con la bala del GML antes del bloque 3, pero con menos bajas 
 | Las armas del GML (PIVOT, PARA) y las balas de las réplicas también sueltan moneda o paquete | Sin `generaPaquete()` no tendrían de dónde sacar munición | — |
 | La metralla no suelta nada | No es un disparo de MonsterLite | Algunas bajas sin premio (8 de 119 en 3000 f con WBLOCK) |
 | La moneda no crece al recogerla (×1,1 por frame hasta ×2) | El VDP no escala sprites | — |
-| COINS en blanco y en la fila 29 | Fuente del sistema; en MonsterLite va en amarillo | No se ve en NTSC (224 líneas) |
+| COINS en blanco y en la fila 29 | Fuente del sistema; en MonsterLite va en amarillo | No se ve en NTSC (224 líneas). **Resuelto en el bloque 9**: el saldo en amarillo, en la fila 28 (26 en NTSC) |
 | Sin `Thread.Sleep` ni sonidos de MonsterLite al recoger | Bloque 12 | Suena el `powUpSnd` del GML |
 
 **VRAM**: la moneda precarga sus 6 frames, 24 tiles: `nextTile` 1433 de 1440, **quedan 7**. El HUD del bloque 9 tendrá que sacar tiles del fondo (`bg2md.py` con menos presupuesto) o de lo que libere el GML.
@@ -2541,7 +2561,7 @@ Referencia: 533/15 con la bala del GML antes del bloque 3, pero con menos bajas 
 - **Fogonazo rojo**: con más de 10 puntos el fondo se pone rojo puro al entrar y vuelve a su paleta con la fracción `counterK / 60` por frame de Update (~0,2 s). Q16: es la imagen de ruinas la que se tiñe.
 - **Tienda GEAR** (`S/StoreMenu.cs`, versión gold), en una banda de las filas 3 a 27: las 4 armas de pago con su nombre y descripción de la tienda (`W/GameAssets.cs`) y "<precio> COINS" (Q14: 6000 / 12000 / 24000 / 48000) o "AVAILABLE!"; "YOUR COINS"; el estante con los iconos de las armas que se pueden elegir y "SELECT YOUR GEAR: <arma>" (izquierda y derecha); "NEXT GEAR AT n KILLS" para PIVOT y PARA (récord del GML); SOUND ON/OFF, MUSIC ON/OFF y PLAY. Arriba y abajo recorren; A, C o START eligen. Comprar descuenta y **equipa** (`setMeOnly`); sin saldo no pasa nada. WBLOCK, comprada de serie. Se descartan el leaderboard, el GEAR de la tienda (no hace nada) y los iconos decorativos de bomba y rayos.
 - **El selector de armas pasa a la tienda** (el estante): el game over ya no lo tiene, como en MonsterLite.
-- **Sonido y música** (`g_soundOn`, `g_musicOn`, `src/audio.c`): apagan efectos, voces y tick, y la música del menú. Se guardarán en SRAM en el bloque 6.
+- **Sonido y música** (`g_soundOn`, `g_musicOn`, `src/audio.c`): apagan efectos, voces y tick, y la música del menú. Se guardaron en SRAM en el bloque 6 hasta que se quitó (ver "Sin SRAM"); ahora duran hasta apagar.
 
 **Divergencias que introduce:**
 
@@ -2580,6 +2600,30 @@ Decisión del usuario: el logo se convierte desde el arte de MonsterLite. `tools
 | Hasta el bloque 6 la munición se conservaba hasta apagar; sigue igual | Q10 | — |
 
 **Aviso para probar**: BlastEm guarda la SRAM en `~/.local/share/blastem/<nombre del ROM>/save.sram`. La carpeta `rom/` (la de `out/rom.bin`) ya tenía un `save.sram` de 32 KB del 8 de noviembre, de cuando la plantilla de SGDK declaraba SRAM: no lleva la firma, así que el juego arranca con los valores por defecto y lo sobrescribe en el primer guardado. Las pruebas de este bloque se hicieron con una copia del ROM llamada `savetest.bin` (carpeta `savetest/`) para no tocar ese fichero.
+
+### Sin SRAM (2026-11-21)
+
+Decisión del usuario del 2026-11-20 (`docs/MONSTERLITE_DECISIONES.md`): **el juego no usa SRAM**. El progreso se guarda sólo en RAM y se pierde al apagar. Se quita el bloque 6 entero:
+
+- Fuera `src/save.c` e `inc/save.h`. `Save_load` y `Save_write` desaparecen (todo lo que guardaban ya eran variables en RAM: `g_lastScore`, `g_coins`, `g_weaponsBought`, `g_weaponIndex`, `g_maxKills`, `g_soundOn`, `g_musicOn`). También `g_gamesPlayed` (`numberOfGames`), que sólo se contaba para guardarlo y no se enseña en ningún sitio.
+- Al encender, los valores de una partida nueva, los mismos que ponía `Game_init` antes de cargar: récord 0, récord de bajas 0, saldo 0, sólo WBLOCK comprada y equipada, sonido y música encendidos.
+- **Cabecera** (`src/rom_header.c`): `sram_sig`, `sram_type`, `sram_start` y `sram_end` en blanco (12 espacios), que es como se marca un cartucho sin RAM de respaldo. `tools/check_header.py` comprueba ahora que la cabecera **no** declara SRAM. El único símbolo de SRAM que queda en la ROM es `SRAM_disable`, que llama el arranque de SGDK (`$GDK/src/sys.c`).
+- **`tools/measure.sh`** ya no depende de `~/.local/share/blastem/rom/save.sram`: el juego no lee la SRAM y, sin "RA" en la cabecera, BlastEm no la monta ni la escribe (el fichero no cambia de hash ni de fecha tras una medida). Mide siempre la escena de encender: **505/34**, igual que con la SRAM en WBLOCK. Ojo: un HEAD anterior a este cambio sí la lee.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Récord, saldo, armas compradas, arma equipada, sonido y música no se guardan | Decisión del usuario (2026-11-20); en MonsterLite iban a PlayerPrefs y al inventario de Soomla | Se pierden al apagar la consola; mientras está encendida se conservan entre partidas |
+| No se cuentan las partidas jugadas (`numberOfGames`) | Sólo servían para guardarlas | Ninguna |
+
+### Botón RESET (2026-11-21)
+
+**Fallo (ya existía antes de quitar la SRAM):** al pulsar RESET salía el error fatal "VRAM: 1753 de 1425 tiles". SGDK entra tras un RESET por `_reset_entry` (`$GDK/src/sys.c:572`), que llama a `main(FALSE)` **sin borrar la RAM ni volver a copiar `.data`**. `nextTile` (`src/vramspr.c`) seguía contando desde donde lo dejó el arranque anterior (1432 → 1769) y `VTile_check` paraba el juego. Además, `Game_init` no repone `g_coins`, `g_ammo`, `g_soundOn` ni `g_musicOn`, y hay más estáticas que dan por hecho la RAM recién puesta (`VTile_allocSpare`, la caché de tilesets subidos, `shownCoins` del HUD...).
+
+**Arreglo** (`src/main.c`, primera línea de `main`): `if (!hardReset) SYS_hardReset();`. `SYS_hardReset` (`$GDK/inc/sys.h:203`, `$GDK/src/sys_a.s`) vuelve a poner la pila y salta a `_start_entry`, que borra los 64 KB de RAM, copia `.data` y llama a `main(TRUE)`: RESET pasa a ser lo mismo que encender (decisión del usuario del 2026-11-21). Se prefirió a reponer a mano cada variable en `Game_init` porque eso obliga a encontrar todas las estáticas con inicializador y a mantener la lista, y un olvido sólo se ve al pulsar RESET. Coste: ninguno en el bucle (sólo se ejecuta al entrar en `main`); el logo de SGDK está desactivado (`ENABLE_LOGO 0`), así que no aparece nada nuevo; sí vuelve a salir `logo.unity` (`Logo_show`), igual que al encender.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| RESET reinicia como al encender | Sin SRAM no hay nada que conservar; decisión del usuario (2026-11-21) | Récord, saldo, armas compradas, arma equipada, munición, sonido y música vuelven a sus valores por defecto |
 
 ### Bloque 7: power-ups (2026-11-17)
 
@@ -2721,10 +2765,439 @@ Con el punto 3: **508/600 y 37 bajas** (dos pasadas iguales). Es otra escena: la
 
 
 
+### Bloque 9: HUD, mensajes de partida y fondo por nivel (2026-11-20)
+
+`src/hud.c` e `inc/hud.h` (el HUD y los mensajes, reescritos), `src/hole.c` e `inc/hole.h` (texto encima de los agujeros: varias filas a la vez, composición en RAM, caché y filas ocultas; `greenTile` en paralelo y las celdas de cada fila precalculadas), `src/game.c` (disparadores de los mensajes, `HUD_tick`, el nivel también con el tiempo parado), `src/main.c` (`Hole_textUpdate` una vez por frame), `src/menu.c` (`HUD_clear` al entrar, `Hole_forgetText` al salir), `src/vramspr.c` e `inc/vramspr.h` (`VTile_read`), `inc/arena.h` (`ML_WAVE_ALERT`, `ML_ALERT_F`, `ML_LEVEL_MSG_F`, `ML_COINS_BUMP_F`).
+
+Decisiones del usuario que aplican: **Q16** (se queda la imagen de ruinas, **sin color por nivel**, y los textos nuevos van con la fuente del sistema), Q8 y los botones A y C del 2026-11-16 (el aviso es "HOLD A/B/C").
+
+**El HUD** (`S/HUD.cs:284-398`, en apaisado; estilos leídos del prefab `controller` y de las modificaciones de la escena con UnityPy):
+
+| Qué | MonsterLite | Port | Dónde |
+|---|---|---|---|
+| BULLETS | arriba a la izquierda, `BULLETS<n>` (la cifra pegada a la palabra), `bulletsSt` a W/18 (17,8 px), la palabra gris (0,784) y la cifra blanca | glifos grandes de sFont2 del GML (16 px), filas 0-1, la cifra pegada a la palabra (hasta 9999; ver la línea de arriba) | `drawTopLine` |
+| Arma | debajo, el icono a W/20 (16 px) y el nombre (`currentWeapon.ToString()`) a 1,4 iconos del borde, con `bestkillsSt` (W/70, 4,6 px) | el icono del menú (32×32) reducido a 16×16 al empezar la partida (de cada 2×2 píxeles, el más claro: el marco y la raya de un píxel del láser no se pierden), filas 2-3; el nombre en la fila 2 desde la columna 3 (24 px; MonsterLite empieza en 23,7). PIVOT y PARA con el nombre que ya tienen en la tienda | `buildIcon`, `drawStatic` |
+| SCORE | arriba a la derecha, `<n>SCORE `, `killsSt` (W/18, el mismo tamaño que BULLETS), alineado a la derecha | **cifra y palabra con los glifos grandes**, la palabra en los glifos 15-19 y la cifra justo delante (hasta 999 999). La hoja del GML no tiene C ni R: se dibujan con su trazo (ver abajo) | `drawTopLine` |
+| Línea de arriba | `BULLETS<n>` y `<n>SCORE` en la misma línea, en los extremos | `BULLETS<n> <n>SCORE` en 20 glifos de 16 px: 12 de palabras y 8 para las cifras, con un glifo de hueco siempre. Si las dos cifras no caben con el hueco (balas de 2 cifras con 6 de puntuación, de 3 con 5, de 4 con 4), manda la puntuación y las balas salen con las cifras que quepan, a 9: **pregunta Q23** | `drawTopLine` |
+| BEST | `<best>BEST `, la cifra en amarillo; es `maxKills1`, que sólo se actualiza al morir (`setScores`, `S/gameControl.cs:720, 797`) | fila 2, alineado a la derecha, cifras amarillas; `g_bestAtStart` (el récord de antes de la partida), que no cambia en la partida. Antes, el LAST provisional subía en directo | `drawStatic` |
+| LEVEL | `LEVEL <n>` | fila 3, a la derecha | `drawLevel` |
+| UPGRADE AT | `UPGRADE AT: <factorLevel·(level+1)>`, con el factor ya duplicado | fila 4, a la derecha; con 5 cifras o más llega al agujero de arriba (columnas 18-23) y va compuesta encima, sin cortarlo | `drawLevel` |
+| COINS | `COINS <saldo>` (saldo total), cifra en amarillo, `coinsSt` centrado en W/2 + W/36 y a H − 8 − W/36 | centrado en 169 px, en la fila 28 en PAL y 26 en NTSC (la misma fórmula con el alto que se ve: 228,8 y 213,5 px) | `drawCoins`, `coinsRow` |
+| Salto de COINS | al recoger, 10 llamadas de `OnGUI` con el rectángulo más alto y más abajo: el texto se va casi entero por debajo de la pantalla | la línea se borra 4 f y vuelve con el saldo nuevo; otra moneda en esos 4 f no lo alarga (como `t`) | `HUD_tick`, `coinsHide` |
+| Deslizamiento | `run()`/`runOut()` en cada `Update` (S/HUD.cs:156-206): `MoveTowards` lineal del grupo hacia (0, 0) a 1000 px/s del aparato en partida y hacia (0, −H) a 300 fuera; empieza arriba. Va con `Time.deltaTime`: con el tiempo parado no se mueve. Dentro del grupo (`BeginGroup`, 213-366) van BULLETS, arma, SCORE, BEST, LEVEL, UPGRADE AT y el mensaje de nivel | **Decisión del usuario (2026-11-20)**. Con los 768 px de alto por defecto del proyecto: 6,25 px/f al entrar (38,4 f) y 1,875 px/f al salir (128 f), sólo con el tiempo corriendo. Las filas 0-4 se reescriben una fila más abajo (o arriba) cada vez que la posición cruza una fila de 8 px: entran en los frames 34-39 de la partida y salen en 18 f del game over (ver "Comprobado"). COINS y los mensajes, fuera del grupo, como en MonsterLite | `drawGroup`, `HUD_tick`, `HUD_menuTick` |
+| Sombra | los textos se pintan dos veces, en negro desplazados y en color encima: BULLETS y SCORE a +8 px de 768 (2,5 px), el mensaje de nivel y el aviso a +4 (1,25 px), ARENA! a (+4, +4); `offsetLetterShadow` = `SCREENW / SCREENW + shadowValue` = 4 (`setSizes`, `shadowValue` 3 [prefab controller]) | **Decisión del usuario (2026-11-20): todas las fuentes llevan sombra, pintada en los tiles.** Glifos grandes: 2 px hacia abajo, en negro (índice 1 de PAL2), dentro de la celda de 16 px (la letra llega a la fila 13). Fuente del sistema: 1 px hacia abajo, en negro (índice 12 de PAL0), en los 96 glifos y en su sitio (las letras ocupan las filas 1-6): la llevan también el menú, el game over, la tienda y la marquesina. Letras sobre agujeros: en su tile compuesto. Los dígitos que vuelan al HUD ya traían sombra en el arte del GML | `HUD_initGraphics`, `shadowFont` |
+
+**Los mensajes:**
+
+| Mensaje | MonsterLite | Port |
+|---|---|---|
+| "ARENA!" | mientras `HUD.counter < 60` (una llamada de `OnGUI` por evento, dos por frame: 30 frames de 60 Hz), `readySt` centrado en y = H − H/1.2 = 40 px más medio alto de línea | 25 f desde el frame en que empieza la partida, fila 5 (40 px), centrado. Es el mismo contador que la gracia de la congelación (Q8, `ML_FREEZE_GRACE_F`), que ahora cuenta también en el arnés para que el cartel se quite |
+| "LEVEL n / NEXT UPGRADE: SCORE x!" | `showNewLevel` lo pone `levelUpgrade()` y lo quita la **primera** corrutina `ChangeLevelWait` que acaba (3 s con `Time.deltaTime` + `WaitForSeconds(0.1)`, tiempo escalado: 155 f); los números se leen al dibujar | 155 f de tiempo corriendo (con el tiempo parado no cuentan, con el hitstop tampoco); se guardan las cuentas de hasta 8 subidas y la primera que acaba lo quita; si sube otra vez con el mensaje puesto, se reescribe con los números nuevos. Filas 9-10 (72-87 px; MonsterLite, ~74-92 centrado en ~83), centradas. Incluye el "!" final del original |
+| " !!!" | la oleada 27 pone `OLEADA = "!!!"`; `oleadaT` empieza en 30, baja 1 por `Update` también con el tiempo parado y lo borra al pasar de 0 (31 frames de 60 Hz); si la oleada vuelve a salir con el texto puesto, no se alarga | **26 f** (25,8), contados también con el tiempo parado y no en el hitstop; no se alarga. En rojo (`<color=red>`), centrado, en la **fila 12** (96-103 px; decisión del usuario, Q22): ver divergencias |
+| Aviso de tiempo parado | "KEEP YOUR FINGER\n ON SCREEN!" y la textura `dedo` mientras `slowMotion && counter >= 60`, y = H − H/2.9 = 157 px | "HOLD A/B/C" (Q8), fila 20 (160 px), centrado, compuesto encima del agujero de abajo. Definitivo: misma posición y texto que en el bloque 2, con la fuente del sistema (Q16) |
+
+**Fondo por nivel: no se porta.** `setCameraLevelColor` (`S/globales.cs:293-303`) desvía el color plano de la cámara al subir de nivel. Por **Q16** el port mantiene la imagen de ruinas sin color por nivel: no hay color plano que desviar. Decisión del usuario, divergencia deliberada.
+
+**El texto encima de los agujeros.** El anillo de agujeros pasa por las filas 3-25, y UPGRADE AT, "ARENA!", el mensaje de nivel y HOLD caen encima. Una letra de la fuente del sistema ocupa la celda entera del plano A, y donde no tiene píxel se ve el plano B: el agujero sale cortado en rectángulos. Desde el bloque 2 la letra se compone en un tile propio (agujero debajo, letra encima), con 10 tiles para un solo texto a la vez. Ahora puede haber hasta cuatro filas a la vez (UPGRADE AT, las dos del nivel y HOLD) y hasta 28 letras sobre agujero (medido con todo forzado a la vez: nivel 20, número de 7 cifras y HOLD). Se cambia en `src/hole.c`:
+
+- Una tabla de hasta 6 filas apuntadas, cada una con su texto de 40 columnas; reserva de **32 tiles** con un tile por columna mientras la letra siga encima de un agujero. Si un agujero cambia de variante (el reborde rojo de cuando sale un gusano), sus celdas con letra no se pisan: la fila se recompone.
+- **Coste, medido.** La primera versión leía la letra y el agujero de la VRAM y subía el tile por la CPU: **~5000 ciclos por letra** (el puerto del VDP con la pantalla dibujándose va a ~50 ciclos por palabra leída y ~120 por palabra escrita; `SYS_disableInts` + `SYS_enableInts`, ~750). Una subida de nivel, con 21 letras sobre agujeros, se comía **2,5 frames**; el cambio de reborde de tres agujeros, 2,8. Medido con `getSubTick` en copias del scratchpad. Ahora: siluetas de la fuente y agujeros ya verdes en RAM, composición de 8 AND/OR por fila; caché por columna (no se recompone si no cambian la letra ni el agujero de debajo); las filas que se ocultan guardan sus tiles por si el texto vuelve igual (`Hole_hideTextRow`; si la reserva se llena, se desaloja una oculta: medido, 0 letras sin componer con todo forzado y 1 desalojo); todo se compone en un frame (`Hole_textUpdate`, sólo si hay algo pendiente) y los tiles y el tramo de fila que cambia van por la cola de DMA al mismo vblank, así que nunca se ve una fila apuntando a tiles a medias.
+- Repartir la composición en varios frames (3 o 6 letras por frame) se probó y salía peor en el arnés: 500 y 501-502 vueltas, frente a 504 de una vez en ese momento. Con la arena llena cada frame va al límite, y lo que cuenta es en cuántos frames hay trabajo de más.
+- `Hole_rowTiles` recorría los 6 agujeros celda a celda, ~5000 ciclos por fila (medido con 100 llamadas); ahora usa las celdas de cada fila precalculadas al arrancar (~3400 con el borrado de la fila).
+- `greenTile` (los índices 1-3 de los agujeros a los verdes) iba píxel a píxel, ~2800 ciclos por tile; ahora es en paralelo, los 8 píxeles de una fila a la vez.
+
+**Lo que se escribe cada frame.** Cada línea del HUD se escribe sólo cuando cambia su valor, en un campo de ancho fijo, y por la cola de DMA (`DMA_QUEUE_COPY`): nadie más escribe en esas celdas, así que no hay orden que respetar con lo que va por la CPU. Por el camino se quitaron tres costes que venían de antes o de la primera versión:
+
+- `HUD_drawBig` escribía tile a tile con `VDP_setTileMapXY` (~1000 ciclos por tile): 16 000 ciclos por cada cambio de BULLETS, o sea en cada disparo, desde la FASE 6. Ahora son dos filas por la cola.
+- Las cifras salían con divisiones de 32 bits (una llamada a libgcc por cifra y operación); ahora, restando potencias de 10.
+- `buildIcon` píxel a píxel costaba ~440 000 ciclos (3 frames al empezar la partida); fila a fila con desplazamientos fijos, menos de uno. Y sólo cuando cambia el arma.
+- `HUD_init` ya no borra las 11 filas del HUD al empezar (~90 000 ciclos): el HUD ya está fuera desde que se entró en el menú.
+
+**VRAM.** Primera entrega: de **1433 a 1434 de 1440** tiles (`nextTile` leído por RAM con la ROM normal y con el HEAD, a los 400 frames): +22 de la reserva de texto (10 → 32), +11 de las cifras amarillas y la admiración roja (copias de la fuente del sistema con los índices 14 y 13 de PAL0, que no usaba nadie), +4 del icono; −36 de los 9 glifos grandes que ya no se usan (la hoja trae `BULETSKIA0123456789OPNXre` de cuando el HUD y el menú del GML escribían KILLS, TOP y NEXT en grande; se suben sólo los 16 de BULLETS y las cifras). Quedan 6. El fondo no cambia (`VTILE_SHARED_TILES` 528).
+
+Con el deslizamiento, la sombra y SCORE en grande: **1432 de 1440** (`nextTile` por RAM). +12 de C, O y R en la fuente grande (la O sale de la hoja del GML, que la traía para TOP); −14 de la variante roja de los agujeros, que tenía 14 celdas idénticas a la normal (el relleno de dentro): ahora usan el tile de la normal (`holeRedTile`), sin cambiar nada de lo que se ve (comprobado con el reborde rojo forzado). La sombra no gasta tiles: va pintada en los que ya había. Quedan 8.
+
+**RAM.** `.bss` de 0xFF3728 a 0xFF5C04 (+9,4 KB): agujeros verdes 3 KB, siluetas de la fuente 2 KB, tiles compuestos 1 KB, filas de texto ~2,5 KB, celdas por fila ~0,9 KB. Libre en el montón de SGDK tras arrancar: 29 938 bytes (`MEM_getFree` en una copia).
+
+**Rendimiento** (`tools/measure.sh`, vueltas de 600; las copias intermedias, en el scratchpad; la final, en dos pasadas iguales):
+
+| Build | Vueltas | Bajas |
+|---|---|---|
+| HEAD (bloque 8) | 508 | 37 |
+| Sin actualizar el HUD ni componer texto (cota) | 516 | 37 |
+| Primera versión (composición por la VRAM, 6 letras por frame) | 503 | 37 |
+| HUD nuevo sin componer texto | 507-508 | 37 |
+| Composición en RAM, caché, filas por DMA | 504 | 37 |
+| **Final** (`Hole_textUpdate` sale enseguida sin nada pendiente) | **509** | **37** |
+| Final, con dos disposiciones distintas del código (control de fase) | 509, 509 | 37 |
+| 10 naves holo (`PORT_STRESS_HOLO`): HEAD / final | 333 / 334 | 26 / 26 |
+| Con deslizamiento, sombra y SCORE en grande, primera versión | 501 | 37 |
+| … con la sombra de la fuente pintada al arrancar y no al empezar la partida | 505 | 37 |
+| … con la línea de arriba entera (C, O, R) y sin préstamo de minúsculas | 503-504 | 37 |
+| … con salida rápida de `HUD_update` (en reposo abría un marco de 264 bytes y guardaba 10 registros: 2-3 líneas de VDP por frame, medido con `GET_VCOUNTER`) | 507-508 | 37 |
+| … con cifras por `divu` y borrado de filas vacías sin `Hole_rowTiles` | **509** | **37** |
+| Ídem, con dos disposiciones distintas del código | 509, 509 | 37 |
+| Ídem, 10 naves holo | 333 | 26 |
+
+En el arnés el nivel sube 5 veces en 600 frames; una copia instrumentada de la versión con caché cuenta 87 letras compuestas y 17 tramos de fila escritos en esos 600 frames. La última mejora fue quitar el recorrido de las 6 filas en los frames sin nada que componer: con la arena llena, cientos de ciclos por frame bastan para que un frame más se pase del vblank.
+
+**Comprobado:**
+
+- **Duraciones por RAM** (copia con los mensajes forzados en el frame 60 de la secuencia de arranque, sólo en el scratchpad; `arenaWant` y `alertWant` cada frame): "ARENA!" en los frames 0-24 de la partida (25); "!!!" en los frames de juego 60-85 (26), con 3 frames de emulador perdidos en medio (el forzado lo pone todo en el mismo frame) que no cuentan. El salto de COINS: `coinsHide` 4, 3, 2, 1 y la línea vuelve en el quinto.
+- **Mensaje de nivel en partida normal** (ROM normal, manteniendo B): sube a nivel 2 hacia los 160 f y a 3 hacia los 275; el mensaje se reescribe con los números nuevos ("LEVEL 3 / NEXT UPGRADE: SCORE 16!") y el game over lo quita.
+- **Reborde rojo con texto encima** (copia que fuerza el rojo en los agujeros 1, 2 y 4 con el mensaje puesto): las letras siguen enteras y compuestas sobre el rojo.
+- **Reserva**: con todo forzado a la vez (nivel 20, número de 7 cifras, "!!!", HOLD), 32 tiles en uso, 1 fila oculta desalojada y **0 letras sin componer**.
+- **Segunda partida**: el HUD del game over quitado, "ARENA!" y el mensaje de nivel otra vez bien (con los tiles de las filas ocultas de la partida anterior).
+- **NTSC** (BlastEm con `-r U`, copia de `mdrun.py` en el scratchpad): COINS en la fila 26, dentro de las 224 líneas; el resto del HUD arriba, en las filas 0-4.
+- **Depurador de gráficos** (`GFXDEBUG=1`): al abrir y cerrar el panel el HUD se repinta entero, también la fila de UPGRADE AT, que primero no volvía (su caché creía tenerla en pantalla: arreglado con `Hole_textTouched`).
+- **Capturas** (en el scratchpad de la sesión, `shots/`): splash `blastem_20261120_165045.png`; "ARENA!" `165101` (y `165153` en NTSC); nivel 2 `160917`; nivel 3 `165107`; nivel 20 con "!!!" y los rebordes rojos `165010`; HOLD con el mensaje de nivel `165012` y `165808` (y `165154` en NTSC); game over sin HUD `165055`; HUD tras cerrar el depurador `165650`.
+
+**Divergencias que introduce este bloque:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| **Sin color de fondo por nivel** (`setCameraLevelColor`) | **Q16, decisión del usuario**: se queda la imagen de ruinas | El fondo no cambia al subir de nivel |
+| **" !!!" centrado en la fila 12** (96-103 px) y no centrado en la esquina de abajo a la derecha, casi fuera de pantalla, como en MonsterLite | El estilo centrado sobre un rectángulo de toda la pantalla que empieza en el centro lo saca de la pantalla. **Decisión del usuario (Q22, 2026-11-20)**: centrado y un poco más arriba que y = H − H/1.9 = 114 px, para que no lo tape la nave al nacer en (160, 120) (su sprite ocupa y = 108-131). La fila 12 no pasa por agujeros en sus columnas (18-21) y deja la 11 libre entre el mensaje de nivel (filas 9-10) y "!!!" | Se ve entero, también con la nave en su sitio de aparición |
+| "!!!" dura 26 f y no 25 | `oleadaT < 0`: 31 frames de `Update`, no 30 (§2.8 corregido) | — |
+| Todos los textos nuevos a 8 px (fuente del sistema) | Q16. En MonsterLite: ARENA! 20 px, el mensaje de nivel 13 y 5 px, BEST/LEVEL 4,6 px, UPGRADE AT 12 px de dispositivo | Los grandes se ven más pequeños y los pequeños más grandes |
+| SCORE hasta 999 999; las balas hasta 9999 y recortadas a 9 si no caben junto a la puntuación | 20 glifos de 16 px en 320; con SCORE en grande quedan 8 para las cifras y un hueco. El nivel 17 empieza en 1 179 648 | Por encima de 999 999 la cifra se queda en 999 999. Con muchas balas y mucha puntuación, la cifra de balas sale en 9 (**Q23**) |
+| **C y R de la fuente grande dibujadas para el port** | sFont2 del GML no las tiene y el usuario pidió SCORE del mismo tamaño que BULLETS. Invención de arte (sólo forma): trazo de 4 px y escalones de 2 px como la K, la C con la barra de la E | — |
+| El HUD se desliza a saltos de 8 px (5 escalones al entrar y 5 al salir), no píxel a píxel | El plano A lleva también los agujeros y el texto de partida: no se puede desplazar; la ventana tiene su mapa ocupado por los tiles del menú | Se ve entrar y salir, a escalones |
+| Al abrir la tienda el HUD se quita de golpe | La tienda borra el plano entero | En MonsterLite seguiría subiendo detrás |
+| El mensaje de nivel no se desliza con el grupo | En partida el grupo ya está en su sitio antes de que pueda subir el nivel (la nave entra a los 40 f), y fuera de partida el mensaje no se dibuja | — |
+| Sombra de 1 px (fuente del sistema) y 2 px (grande) hacia abajo, también en ARENA! (que en MonsterLite va en diagonal) y en los textos que en MonsterLite no la llevaban (BEST, LEVEL, UPGRADE AT, COINS, "!!!", menús) | Decisión del usuario: todas las fuentes con sombra, pintada en los tiles. 1,25 px y 2,5 px de MonsterLite redondeados; un solo glifo por carácter | — |
+| La sombra de los glifos grandes sustituye a la de 1 px en diagonal que traía sFont2 del GML | MonsterLite la pone vertical a 2,5 px | — |
+| Los glifos con descendente de la fuente del sistema (`, ; g j p q y`) suben 1 px, y la barra `|` pierde su última fila | Llegaban a la fila 7 de su celda y la sombra salía cortada (lo vio el verificador en la tienda: "ways", "energy", "frecuency"). Así cabe en el mismo tile: 0 tiles | Esas letras quedan 1 px más altas que las demás |
+| Sin el temblor de ±2 px del mensaje de nivel (`yU`) | Sería desplazar el plano entero | Texto quieto |
+| Sin la textura `dedo` en el aviso | Q8 (no hay pantalla táctil), como en el bloque 2 | — |
+| Las palabras BULLETS y SCORE no van en gris (0,784) | Son el arte blanco del GML (índice 8 de PAL2, compartido con los agujeros y el logo) | Un poco más claras |
+| El salto de COINS se hace borrando la línea 4 f | En MonsterLite la línea baja casi entera por debajo de la pantalla; en el port la siguiente fila hacia abajo ya está fuera o es campo | Igual a la vista: parpadea al recoger |
+| BEST es el récord de antes de la partida | Como `maxKills1` en MonsterLite. Antes del bloque, el LAST provisional subía en directo | Se queda fijo durante la partida |
+| `levelUpgrade()` también con el tiempo parado | Va en `Update`, que sigue con `timeScale` 0 (antes el port sólo miraba el nivel con el tiempo corriendo) | Si los rayos suben de nivel con el tiempo parado, el mensaje sale ya y su cuenta espera |
+| Se ven nombres de arma del GML (PIVOT, PARA) | MonsterLite sólo tiene 5 armas; las del GML conviven (Q9) | — |
+
+
+### Bloque 10: logros (2026-11-21)
+
+`inc/achieve.h` y `src/achieve.c` (nuevos: la lista, la máscara, los contadores y la cola de avisos), `src/game.c` (las comprobaciones), `src/menu.c` (la entrada ACHIEVEMENTS de la tienda y la pantalla de lista), `src/hud.c` e `inc/hud.h` (el aviso en partida y en el game over).
+
+**Todo este bloque es invención.** MonsterLite no define ningún logro (`GameCenterSingleton.cs:76-96` tiene funciones genéricas que nadie llama; `docs/MONSTERLITE_GAP.md` §2.11) y el GML tampoco. La lista, las cantidades, el aviso y la pantalla los decide el usuario (**Q18**, 2026-11-15: todos los grupos, cada uno con monedas; cantidades cerradas el 2026-11-21, `docs/MONSTERLITE_DECISIONES.md`) o, donde él no dijo nada (posición y duración del aviso, cómo se entra en la lista, textos), el desarrollador; todo va en la tabla de divergencias de abajo.
+
+**Los 17 logros y dónde se comprueba cada uno.** La propuesta de Q18 tenía 17, no 18 (la decisión del 2026-11-21 lo corrige); WBLOCK no tiene logro porque viene comprada. Bit = `AchieveId` (`inc/achieve.h`); al conseguir uno se pone su bit en `g_achMask`, su recompensa se suma a `g_coins` (el saldo, no a `g_coinsEarned` ni a las recogidas) y su aviso se encola.
+
+| Bit | Grupo | Logro (texto) | Monedas | Se comprueba en |
+|---|---|---|---|---|
+| 0 | PROGRESO | FIRST GAME: terminar una partida | 50 | `Game_killPlayer` (`src/game.c:561`); el aviso sale en el game over |
+| 1-3 | PROGRESO | REACH LEVEL 5 / 10 / 15 | 100 / 500 / 2000 | `Game_levelUpgrade`, sólo cuando sube (`src/game.c:379`); si salta varios niveles, salen todos |
+| 4-6 | PROGRESO | SCORE 100 / 1000 / 10000 | 100 / 300 / 1000 | donde se suma puntuación: las bajas de disparo y metralla (`src/game.c:950`) y las de bomba y rayos (`addKills`, `src/game.c:365`). Una comparación de `u32` con `g_achNextScore`, sin llamada, en los frames con bajas |
+| 7-10 | TIENDA | BUY LASER / TWAY / CIRCULAR / MOIRE | 600 / 1200 / 2400 / 4800 | al comprar en la tienda (`storeInput`, `src/menu.c:987`); la recompensa entra ya en el saldo |
+| 11-12 | TIENDA | COLLECT 1000 / 10000 COINS | 100 / 1000 | al recoger una moneda en partida (`src/game.c:862`): `g_coinsCollected`, `u32` acumulado entre partidas, sólo con las monedas cogidas (ni recompensas ni saldo) |
+| 13 | POWER-UPS | USE A BOMB | 100 | al tocar la bomba (`src/game.c:885`) |
+| 14 | POWER-UPS | USE THE RAYS | 100 | al tocar los rayos (`src/game.c:904`) |
+| 15 | POWER-UPS | ACTIVATE A HOLO SHIP | 100 | cuando la nave toca una holo y la activa (`Proj_holoTouch`, `src/game.c:922`) |
+| 16 | POWER-UPS | 10 KILLS, ONE BOMB | 500 | bajas de esa detonación, lo que devuelve `MLPow_clearEnemies` (`Enemy_explodeAll` + `Snake_explodeAll`: arañas y cabezas, los eslabones no cuentan) (`src/game.c:889`). Los rayos no cuentan aunque acaben en `clearEnemies` |
+
+**Vive en RAM** (sin SRAM, decisión del usuario del 2026-11-20): `g_achMask` (u32), `g_coinsCollected` (u32), `g_achNextScore` (u32), la cola (17 + 2 bytes). `Achieve_init` lo pone a cero en `Game_init`, que corre al encender y tras un RESET (`SYS_hardReset` borra la RAM). ~37 bytes de `.bss` en total con los del HUD y el menú.
+
+**El aviso.** "ACHIEVEMENT! <nombre> +<monedas>", con la fuente del sistema y su sombra (Q16 y la decisión de la sombra del bloque 9), las monedas en amarillo como COINS, centrado en la **fila 26** (208-215 px), **100 f (2 s)**. La fila 26 no pasa por ningún agujero (el de abajo, en (166, 178), acaba en la 25), ni por los mensajes del bloque 9 (ARENA! 5, nivel 9-10, "!!!" 12, HOLD 20, COINS 28), ni por el panel del depurador de gráficos (27-29): se escribe directamente, de una vez y por la cola de DMA, sin usar la reserva de letras encima de los agujeros. Varios en el mismo frame se encolan (por orden de llegada; como cada uno sale una sola vez, la cola de 17 no se desborda) y salen uno detrás de otro. El temporizador cuenta en cada frame de partida, también con el tiempo parado (es un texto del port, como "!!!"), no en el hitstop, y en el game over; en la tienda y en la lista se para y sigue en la partida siguiente (las dos pintan en esa fila: PLAY y BACK). En el bucle de partida sólo añade una comparación a la salida rápida de `HUD_update` y otra en `HUD_tick`.
+
+**La lista.** Se entra desde la tienda GEAR, con una entrada nueva, **"ACHIEVEMENTS n/17"**, en la fila 24 (que estaba vacía, entre "NEXT GEAR AT…" y SOUND/MUSIC). Cambio visible del menú: esa línea, y que arriba/abajo pasan por ella entre el estante y SOUND (la tienda tiene 9 entradas en vez de 8; el resto de la navegación no cambia). Por qué en la tienda y no como tercera opción del game over: el game over sólo tiene PLAY y GEAR en una fila con izquierda/derecha, y volver de la lista al game over obligaría a repintar su banda (filas 12-19) desde la grande (3-27); la tienda ya usa la banda grande y se repinta entera con `stDirty`. La pantalla usa la misma banda, la misma fuente y el mismo estilo que la tienda: título centrado "ACHIEVEMENTS n/17" (fila 4), una cabecera por grupo (PROGRESS, SHOP, POWER-UPS) y una línea por logro con `[*]` (conseguido) o `[ ]`, el nombre y "<n> COINS" alineado a la derecha; ">BACK" en la fila 26. A, B, C o START vuelven a la tienda, en la misma entrada. Se pinta una vez al abrir (22 líneas por la CPU, en el menú).
+
+**VRAM: 0 tiles.** Todo es fuente del sistema, ya cargada (las cifras amarillas son las del bloque 9). `nextTile` **1432 de 1440** (`userTileMaxIndex`), leído por RAM a los 400 frames con la ROM normal: igual que antes del bloque.
+
+**Rendimiento** (`tools/measure.sh`): antes **505 / 34**, después **505 / 34**. Igual: en el arnés se consiguen logros (puntuación y niveles) y su aviso se escribe, pero son pocas escrituras de una fila en 600 frames.
+
+**Comprobado en BlastEm** (ROM normal salvo donde se dice; un conductor del depurador en el scratchpad que lee y escribe RAM con `p/d` y `set`, manteniendo B para que corra el tiempo):
+
+- **Puntuación**: `g_factorLevel` a 100 000 (para que no suba el nivel) y `g_score` a 99, 999 y 9999: en la siguiente baja se ponen los bits 4, 5 y 6 (máscara 0x10, 0x30, 0x70) y el saldo sube 100, 300 y 1000 más las monedas recogidas entre medias.
+- **Niveles**: `g_factorLevel` a 1 con 10 001 de puntuación: el nivel salta a 10 001 y en el mismo frame se ponen los bits 1-3 (0x7E), +2600 monedas exactas, y quedan 3 avisos más en cola; salen uno detrás de otro (capturas).
+- **Monedas recogidas**: `g_coinsCollected` a 990 y una moneda de 10 debajo de la nave (escrita en `coins[]`): bit 11 y +110 (10 + 100); a 9990 y otra: bit 12 y +1010.
+- **Bomba, rayos**: una bomba y unos rayos escritos en `pows[]` debajo de la nave: bits 13 y 14, +100 cada uno (la bomba mató a lo que hubiera, pero menos de 10).
+- **Holo**: se espera a que una oleada saque una holo inactiva y se pone la nave encima: bit 15, +100.
+- **Primera partida**: la nave encima de una araña: game over, bit 0, +50, y el aviso en el game over.
+- **Compras**: en la tienda, saldo a 100 000 y A en las cuatro armas de pago: bits 7-10, saldo final 19 000 = 100 000 − 90 000 + 9000.
+- **10 bajas con una bomba** (ROM `PORT_STRESS=1`, que llena la arena): con las 8 arañas vivas y los gusanos, una bomba debajo de la nave mata 11: bits 13 y 16, más los niveles 5 y 10 que suben esas bajas; +1200 = 100 + 500 + 100 + 500.
+- **Los 17 bits** puestos al final (0x1FFFF entre las dos ROM) y la lista con 16/17 en la ROM normal.
+- Las variantes normal, `PORT_STRESS=1` y `GFXDEBUG=1` compilan sin avisos.
+- Capturas (en `$HOME`): aviso "SCORE 100 +100" en partida `~/blastem_20261121_134427.png`; la cola ("SCORE 1000 +300" detrás del anterior) con el mensaje de nivel puesto `~/blastem_20261121_134431.png`; aviso en el game over `~/blastem_20261121_134438.png`; la lista `~/blastem_20261121_134451.png`; la tienda con la entrada ACHIEVEMENTS `~/blastem_20261121_134452.png`.
+
+**Divergencias que introduce este bloque (todas invención: MonsterLite y el GML no tienen logros):**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| **Los 17 logros y sus recompensas** (50 a 4800 monedas, 14 950 en total) | Decisión del usuario (Q18, 2026-11-15; cantidades, 2026-11-21) | Monedas de más: con las cuatro compras, el 10 % del precio vuelve como recompensa |
+| "Recoger monedas" cuenta las cogidas en partida, acumuladas entre partidas | Decisión del usuario | Las recompensas no ayudan a conseguir el logro de monedas |
+| "10 bajas con una bomba" cuenta arañas y cabezas de una detonación | Decisión del usuario; es lo que cuenta `clearEnemies` | Con los topes del port (8 arañas, 2 gusanos hasta el nivel 9 y 3 desde el 10) caben 10 u 11: hace falta la arena casi llena |
+| **Aviso en la fila 26, 2 s, en cola**; también en el game over | Invención del desarrollador: la única fila libre de agujeros y de los mensajes del bloque 9 por debajo de HOLD; 2 s para poder leer 39 columnas | Tres logros a la vez tardan 6 s en verse todos |
+| El aviso se para en la tienda y en la lista y sigue en la partida siguiente | Las dos pantallas pintan en esa fila | Lo comprado se anuncia al empezar la partida siguiente; en la lista ya sale marcado |
+| **La lista se abre desde la tienda** (entrada ACHIEVEMENTS en la fila 24) | Invención; ver arriba por qué no en el game over | Dos pasos desde el game over (GEAR, ACHIEVEMENTS) |
+| Textos en inglés, como el resto del juego | Invención | — |
+| En NTSC el aviso caería en la fila 24, encima del agujero de abajo, y lo cortaría mientras se ve | El port es PAL (decisión 1); la fila sale de la de COINS menos 2 | Sólo en NTSC |
+
+### Bloque 12: efectos y sonido (2026-11-21)
+
+Hecho todo, con las decisiones del usuario del mismo día: las líneas de las naves holo de puntos muy juntos, fuera la muerte del GML y los PCM del GML sin uso, y **sin música en partida** (Q21 revocada: no se convierten las pistas `.xm`, ni ahora ni después; el estudio que se hizo queda al final, descartado). El usuario pidió hacer este bloque antes que el 11. Tras la verificación se corrigieron el reparto de canales (se perdían casi todos los disparos), la franja de la sacudida grande, la duración de cada muestra y varios comentarios (ver "Correcciones tras la verificación", al final de la sección).
+
+`inc/shake.h` y `src/shake.c` (las dos sacudidas de MonsterLite, el `stShake` del GML para lo que sólo es del GML), `inc/audio.h` y `src/audio.c` (los sonidos de MonsterLite, prioridades y reparto de canales), `inc/trail.h` y `src/trail.c` (nuevos: la estela), `src/game.c` e `inc/game.h` (hitstop, estado `GAME_DYING`, nave roja, sacudidas, voces), `src/projectile.c` e `inc/projectile.h` (sonidos de disparo e impacto, bajas por bala, sacudida de las bolas), `src/mlpow.c`, `src/effect.c` e `inc/effect.h`, `src/menu.c` (ding, CARALLUDO, AWESOME, botones), `src/beam.c` e `inc/beam.h` (líneas holo en tramos, cola del pool), `src/bg.c` (el fondo envuelto en la sacudida), `inc/vramspr.h` (fondo de 528 a 504 tiles), `src/spr.c`, `src/spr_a.s` e `inc/spr.h` (pool de 320, `Spr_check`, cola), `inc/arena.h` (constantes del bloque), `res/resources.res`, `res/sound/ml*.wav`, `res/sprite/trail.png` y `res/sprite/lineseg.png` (nuevos), `res/sprite/bg_ruins.png` y `res/bg_ruins.h` (regenerados), `tools/ml2md_audio.py`, `tools/ml_trail.py` y `tools/ml_lineseg.py` (nuevos), `tools/gm2md_audio.py` y `res/sound/` (fuera nueve PCM del GML), `src/rom_header.c`.
+
+**Hitstop (Q17).** El original duerme el hilo (`Thread.Sleep`) 30 ms por cada baja con bala (`globales.milisecsEnemyDestroyed = 30`, `S/globales.cs:81`; llamadas en `S/bulletScript.cs:62, 80` y `S/bulletThinSrc.cs:45, 65`) y 100 ms al tocar la bomba o los rayos (`S/playerMovement.cs:200, 213`). El port lleva la cuenta en milisegundos (`hitstopMs`, `src/game.c`) y cada frame congelado paga 20: 100 ms son 5 frames exactos y cada baja con bala, **1 y 2 frames alternos** (30 → un frame y quedan 10; la siguiente, 40 → dos frames), 1,5 de media, los 30 ms justos. Por eso ni 1 ni 2 fijos: 1 se queda en 20 ms (un tercio corto) y 2 en 40 (un tercio largo). Varias bajas en el mismo frame suman, como varios `OnTriggerEnter` con su `Sleep`. Cuentan las balas finas (también las de las naves holo, que son `BulletThin`) y las gordas de WBLOCK y TWAY (`Proj_takeBulletKills`); no LASER, MOIRE, CIRCULAR, la metralla, las armas del GML, la bomba ni los rayos. Medido en BlastEm (ROM de estrés, `now` de la estela como sonda de "frame de partida que corre"): una baja con bala congela 1 frame (`hitstopMs` 30 → 10), la siguiente 2 (40 → 20 → 0); una baja de metralla, ninguno.
+
+**Cámara lenta de la muerte** (`S/gameControl.cs:690-725`). `finishGame` pone el estado en GAMEOVER y `wait()` hace dos `WaitForSeconds(0.1)` con `Time.timeScale = 0,2`: 0,2 s de juego, **1 s real = 50 frames** (`ML_DEATH_SLOW_F`), en los que `FixedUpdate` corre una vez de cada cinco (`ML_DEATH_SLOW_DIV`). Estado nuevo `GAME_DYING`: la nave se queda donde murió, **en rojo** (el frame que tiene subido, recoloreado con el color de PAL1 más parecido a (r, 0, 0), que es lo que hace `SpriteRenderer.color = Color.red`, y subido por DMA encima del suyo: 0 tiles), y uno de cada 5 frames avanza el mundo: enemigos (que siguen persiguiendo a la nave), gusanos, balas en vuelo (sus bajas suman: en MonsterLite `setScores` va después), metralla, lo del suelo, líneas, explosiones, números, la estela y la salida del HUD (`runOut` va con `Time.deltaTime`). Al acabar, `shake(4)` y `clearPlayer()`: la nave desaparece, sacudida grande de 3 frames y después el game over. Medido: estado 3 durante 50 frames, la cabeza de gusano que la mató avanza cada frame antes y un paso de cada 5 durante la cámara lenta (x 8142 → 8145 → 8151 → 8159…), luego 3 frames de sacudida (por ejemplo (−36, 20), (−33, 22), (21, 39)) y el menú.
+
+**La nave a ×4 (`landingAnim`) no se porta.** `wait()` la reproduce en cada vuelta (`S/gameControl.cs:700-701`), y también cada frame con el tiempo parado (`:270`): con el `Animator` en modo Normal la nave se queda a ×4 (4,00 × 3,82) mientras dura, y vuelve a ×1 en 0,23 s. El VDP no escala: harían falta frames pre-escalados. A ×4 la nave de 24 px son 96×96 = 144 tiles por frame (12×12 celdas, 9 sprites de 32×32), con un hueco de VRAM de 144 tiles para subirlos por DMA: quedan 6 libres. No cabe. Alternativa, si se quiere: ×2,67 (64×64, 64 tiles) reutilizando el hueco del fogonazo de `oMuerte` cuando éste ha acabado, con 32 rotaciones pre-escaladas en ROM (64 KB), o bajar más el fondo. **Divergencia**: la nave se queda a su tamaño, en rojo en la muerte.
+
+**Sacudidas (Q20).** `S/cameraScript.cs`: `shake(t)` pone la cámara cada frame en un punto al azar de ±4 u × ±3 u (**±80 / ±60 px**) durante t frames de Update y cambia su tamaño (zoom, que no se porta: Q20); `shakeSmall(t)`, **±0,2 u = ±4 px**. Las dos devuelven la cámara a (0, 0) al acabar. Llamadas, con t pasado a frames (÷1,2 redondeado; el bucle `while (t > 0)` da una vuelta con 0,5 y 0,3):
+
+| Llamada | Dónde en MonsterLite | t → frames | Dónde en el port |
+|---|---|---|---|
+| `shake(4)` al tocar en el menú | `S/gameControl.cs:219` | 4 → 3 | `Game_update` al salir del splash (`src/game.c`, `fromSplash`) |
+| `shake(4)` al acabar la cámara lenta | `S/gameControl.cs:714` | 4 → 3 | `dyingUpdate` |
+| `shake(1)` bomba | `S/playerMovement.cs:206` | 1 → 1 | `playUpdate`, `POW_BOOM` |
+| `shakeSmall(10)` rayos | `S/playerMovement.cs:217` | 10 → 8 | `playUpdate`, `POW_RAYS` |
+| `shakeSmall(1)` WBLOCK / MOIRE | `S/disparo.cs:61, 104` | 1 → 1 | `playUpdate`, al disparar |
+| `shakeSmall(0.5)` LASER, `shakeSmall(0.3)` TWAY | `S/disparo.cs:83, 122` | una vuelta → 1 | `playUpdate`, al disparar |
+| `shakeSmall(3)` por frame de bola que persigue | `S/circularScr.cs:59` | 3 → 3 | `updateBall` (`src/projectile.c`) |
+
+La bala fina no sacude en MonsterLite: se quita el `stShake(1, 1, 0.1)` del GML, que eran 0,2 px y no se veía. Se quedan los `stShake` del GML de lo que sólo existe en el GML (metralla, disparo de PIVOT y PARA). Se quitan `Shake_cruz` (la bomba y el fogonazo de la muerte del GML: el de la muerte lo cortaba `Shake_stop` en el acto), `Shake_ray` y `Shake_thinShot`, sin llamadas ya. Medido: al salir del splash, `bigLeft` 3 → 0 en 3 frames con desplazamientos (−46, −34), (19, 16), (−28, −15).
+
+**La franja de la sacudida grande** (corregida tras la verificación): el fondo (plano B) mide 64×32 celdas y el campo 40×30; con ±80 px asomaba una franja de hasta 80 px con la última columna repetida. Ahora las columnas 40-51 del plano son las 0-11 del campo y las 52-63 son las 28-39 (`drawRow`, `src/bg.c`): en horizontal se ve el otro lado envuelto, exacto hasta 96 px. En vertical sólo sobran 2 filas (el plano tiene 32): las filas 30 y 31 son la 0 y la 1, que es exacto los primeros 16 px por debajo; por encima asoman esas dos filas antes que las de abajo del campo. El plano A (agujeros, HUD) no tiene nada en las columnas de sobra y por ahí se ve el fondo. Capturas: `~/blastem_20261121_173347.png` y `~/blastem_20261121_173348.png` (sacudida alargada por RAM).
+
+**Estela de la nave** (`TrailRenderer` del hijo "nave" de `P/player.prefab`, leído con UnityPy: `m_Time` 0,26 s = **13 f**, `m_MinVertexDistance` 0,1 u = 2 px, ancho 0,08 u = 1,6 px → 0,001, blanca con alfa 0,44 en la cabeza y 0,94 en la cola). Un vértice cuando la nave se ha alejado más de 2 px del anterior; cada uno vive 13 frames de juego (se para con el tiempo parado y en el hitstop, y va a la quinta parte en la cámara lenta). El VDP no traza líneas: un sprite de 8×8 por vértice, con un punto de 2×2 en gris 146 los 7 primeros frames y de 1×1 en gris 219 los demás (`tools/ml_trail.py`; blanco con poco alfa sobre el verde del campo es gris). Cada vértice tiene su sprite fijo: se coloca al nacer, cambia de punto una vez y se aparca al caducar; sólo con la sacudida se recolocan todos. **13 sprites como mucho; `trail.png` son 2 tiles de VRAM.**
+
+**Voces y efectos.** La biblioteca de `SoundManager` está en la escena (`Assets/Scenes/MonsterLite.unity`), no en el prefab, que es viejo y no tiene las voces de mujer ni el "ding". Leída con UnityPy, el clip de cada campo y cuándo suena (sólo lo que tiene llamada en el código; `MonsterLite_ultimo_commit`):
+
+| Sonido (campo) | Clip | Cuándo suena en MonsterLite | Dónde suena en el port | Prioridad |
+|---|---|---|---|---|
+| bala fina (`nBulletSnd`) | `shot.wav` | cada disparo sin munición, `S/disparo.cs:149` | `Proj_fireThin` | 5, grupo de disparos |
+| WBLOCK (`wBulletSnd`) | `shotBasic.wav` | `S/disparo.cs:57` | `spawn`, `PROJ_WBLOCK` | 5, grupo de disparos |
+| LASER y MOIRE (`laserBulletSnd`, `moireBulletSnd`) | `laser.wav` | `S/disparo.cs:69, 95` | `fireBeam` | 5, grupo de disparos |
+| TWAY (`triBulletSnd`) | `3way.wav` | `S/disparo.cs:115`, una vez por bala (3 en el mismo frame) | `Proj_fireWeapon`, una vez | 5, grupo de disparos |
+| CIRCULAR (`circularBulletSnd`) | `retroUFO.wav` | `S/disparo.cs:129` | `Proj_fireWeapon` | 5, grupo de disparos |
+| impacto de bala (`bombaXPLSnd`, `playBombaClip`) | `explosionDePolvo2.wav` | cada impacto de bala contra araña o cabeza, mate o no (`S/bulletScript.cs:41`, `S/bulletThinSrc.cs:33`) y cada enemigo de `clearEnemies` si no suena nada (`S/enemyController.cs:175`) | `hitML` (`src/projectile.c`) y `MLPow_clearEnemies` (una vez) | 5, grupo de impactos |
+| recoger paquete o moneda (`pillaPaqueteGameSnd`) | `powUp3Wah_d.wav` | `S/playerMovement.cs:184, 190` | `playUpdate`, `POW_PACK` y `POW_COIN` | 9 |
+| bomba: "BOOM" (`boomSpeechSnd`) | `Boom.wav` (el `sfxBoom` del GML, la misma toma) | `S/playerMovement.cs:202` | `POW_BOOM` | 13 |
+| bomba y rayos (`bombaAmarillaXPLSnd`) | `bombaamarilla.wav` | `S/playerMovement.cs:208, 215` | `POW_BOOM`, `POW_RAYS` | 11 |
+| "EXPLOSIONS" (`explosionWomanSnd`) | `xplosions.wav` | bomba, `S/playerMovement.cs:209` | `POW_BOOM` | 13 |
+| "RAYS" (`raysWomanSnd`) | `rays.wav` | rayos, `S/playerMovement.cs:218` | `POW_RAYS` | 13 |
+| repetea (`repeteaSpeechSnd`) | `repeteaSpeech.wav` | al activar una nave holo, `S/naveProxyController.cs:43` | `Proj_holoTouch` en `playUpdate` | 13 |
+| "ARENA" (`arenaWomanSnd`) | `woman voice_short.wav` | `menu.Start`, `S/menu.cs:27`: el menú se crea una vez, al cargar la escena (`initMenu`, `S/gameControl.cs:158`) | al final de `Game_init`: tras el logo, al salir el splash | 13 |
+| "ding" (`dingSnd`, tono 3) | `ding.wav` | cada paso de la cuenta de SCORE del game over, `S/gameOverSrc.cs:128` | uno por frame en que sube SCORE (Q15), `Menu_update` | 8 |
+| "CARALLUDO" (`caralludoSpeechSnd`, tono 2) | `Fafarre.aiff` (una fanfarria, no la voz) | cuando la cuenta pasa por `kills − 1`, `S/gameOverSrc.cs:129-131` | igual, `Menu_update` (con 0 o 1 punto no suena, como allí) | 13 |
+| "AWESOME" (`awesomeWomanSnd`) | `awe3.wav` | en cada `OnGUI` del game over mientras sale NEW RECORD!, `S/gameOverSrc.cs:262` | una vez, al entrar en el game over con récord (`Menu_enter`) | 13 |
+| botón corto (`buttonShortSnd`) | `buttonShort.wav` | comprar (`S/StoreMenu.cs:226`), cambiar de arma en el estante (`:475`), encender el sonido (`S/globales.cs:461`) | `storeInput` | 9 |
+| botón largo (`buttonLongSnd`) | `buttonLong.wav` | GEAR del game over (`S/gameOverSrc.cs:381`) | `Menu_update`, GEAR | 9 |
+
+**Sin llamada en MonsterLite, no se añaden:** risa (`S/enemyController.cs:184`, comentada), crispado (`S/bulletScript.cs:124`, comentada), tres vías (`:133`, comentada), fantasma, bolas, láser hablado, bomba hablada, interferencia (`playInterferenciaClip` no la llama nadie), polvo (`playdustClip`), bomba pequeña (`playSmallBombaClip`) y `circularSpeechSnd` (vacío). Tampoco suenan la muerte (`finishGame`), los disparos de las naves holo (`disparoProxy`), los del LASER y MOIRE al matar (`RaycastScr`), las bolas al matar (`circularScr`), la explosión de una holo (`collideAndDie`) ni la de los rayos al acabar (`RayoScr`): el port los deja mudos donde antes sonaban los del GML (`aranamorteSnd` y `dustSnd` en cada `Effect_spawn`).
+
+**Se quedan los del GML** donde MonsterLite no define nada: el disparo del PARA (`shotSnd`) y de la BOMBA del GML (`laserSnd`), las explosiones de lo que sólo es del GML (metralla, PIVOT, PARA, BOMBA: `aranamorteSnd` + `dustSnd`), la cascada de explosiones al morir un gusano (`morteGusano`, `aranamorteSnd`), las voces de arma de la tienda (`triggerSpeech`, ahora junto al botón corto de MonsterLite) y la música del menú. El tick del PSG que hacía de "ding" se sustituye por el `ding.wav` de MonsterLite (Q15). **Se quitan** (decisión del usuario del 2026-11-21): la muerte (`morteSnd` de `oMuerte`; en MonsterLite la muerte no suena) y los PCM del GML que ya nadie llamaba, `sfxWBlock`, `sfxThreeWay`, `sfxCircular`, `sfxBomba`, `sfxRayos`, `sfxPowUp`, `sfxRepetea`, `sfxRisa` y `sfxMorte` (fuera de `res/resources.res`, de `tools/gm2md_audio.py` y de `res/sound/`; comprobado con grep que no quedaba ninguna referencia).
+
+**Conversión.** `tools/ml2md_audio.py`: `afconvert` (de macOS) lee los WAV y el AIFF, baja a 16 bits mono, aplica el tono de `SoundManager` declarando la frecuencia ×2 o ×3 en la cabecera y remuestrea a 8 bits a 13 300 Hz (con el filtro de `afconvert`), y recorta el silencio del final. 17 clips, **261 KB**.
+
+**Presupuesto de canales y prioridades.** XGM2 mezcla 3 canales PCM. MonsterLite toca todo por un solo `AudioSource` con `PlayOneShot`, que superpone sin límite. En el port, el **canal 1 es de la música del menú** (en partida no hay música: Q21 revocada) y los efectos y voces se reparten el **2 y el 3** (`pickChannel`, `src/audio.c`): primero un canal libre; si no hay y el sonido es de los que se repiten (disparos o impactos, que llevan grupo), el canal que tenga otro de su mismo grupo, el más viejo; si no, el que tenga el sonido de menos prioridad, siempre que no supere la del nuevo, y entre iguales el más viejo; si los dos tienen más, el nuevo no suena. Cada canal guarda en RAM cuándo acaba lo suyo y con qué prioridad: el `SOUND_PCM_CH_AUTO` del driver mira el canal 3 antes que el 2 sin comparar prioridades (con la bomba, "EXPLOSIONS" cortaba a "BOOM" teniendo el estallido, de menos prioridad, en el otro) y no ve lo pedido en el mismo frame. La duración: medido en BlastEm (PAL), ARENA (69 376 muestras) suena 261 frames, 265,8 muestras por frame: 266 está bien; el frame de más que vio el verificador venía de truncar `len / 266`. Ahora se redondea hacia arriba y se suma uno por el arranque del Z80, todo resuelto al compilar (sin división por llamada). Prioridades (**invención del port**, todo tiene la 128 en MonsterLite): música 15; voces 13; estallido de bomba y rayos 11; recoger, botones 9; ding 8; disparos e impactos 5, cada uno en su grupo. Qué se corta: en combate, un canal acaba con los disparos y el otro con los impactos, y cada uno corta al anterior de su grupo; con uno solo libre (la voz ARENA ocupa el otro los 5 primeros segundos de partida) se turnan; nada de lo que se repite corta una voz. Con la bomba (4 sonidos en un frame) suenan "BOOM" y "EXPLOSIONS"; con los rayos, el estallido y "RAYS". El canal 1 no se usa para efectos aunque esté libre en partida: un tercer canal sonando cuesta ~14 vueltas de 600 en el caso peor (476 → 462; el Z80 lee cada muestra de la ROM por el bus del 68000).
+
+**Cuántos disparos suenan** (contadores en RAM en una copia del scratchpad: sonidos pedidos y sonidos que llegan al driver). Partida normal manteniendo B hasta morir (~5 s): con los disparos a prioridad 3 por debajo de los impactos, **1 de 18** disparos de bala fina y 18 de 18 impactos (el impacto, 1,42 s, se quedaba los dos canales); con los disparos a 6 por encima, 18 de 18 disparos pero 3 de 18 impactos; con el reparto final, **18 de 18 disparos y 18 de 18 impactos**. Arnés de estrés (600 f, arena llena): antes 6 de 48 disparos y 51 de 58 impactos; ahora **40 de 47 y 49 de 57**.
+
+**Las líneas a las naves holo (decisiones del usuario del 2026-11-21).** Antes, 3 puntos de 3×3 (`dot.png`) por línea. El usuario pidió el grosor de la estela y puntos muy juntos, y después, quitarle tiles al fondo para que salgan a 3 px en cualquier dirección. Cada sprite lleva ahora un **tramo de varios puntos de 2×2 ya dibujados** (`tools/ml_lineseg.py`, `res/sprite/lineseg.png`) en una de 7 direcciones entre 0° y 90°; de 90° a 180°, la misma con volteo vertical:
+
+| Dirección | Paso entre puntos | Sprite | Puntos | Avance del tramo | Tiles |
+|---|---|---|---|---|---|
+| 0° | (3, 0): 3 px | 32×8 | 10 | 30 px | 4 |
+| 18,4° | (3, 1): 3,2 px | 16×8 | 5 | 15,8 px | 2 |
+| 33,7° | (3, 2): 3,6 px | 16×16 | 5 | 18,0 px | 4 |
+| 45° | (2, 2): 2,8 px | 16×16 | 7 | 19,8 px | 4 |
+| 56,3° | (2, 3): 3,6 px | 16×16 | 5 | 18,0 px | 4 |
+| 71,6° | (1, 3): 3,2 px | 8×16 | 5 | 15,8 px | 2 |
+| 90° | (0, 3): 3 px | 8×32 | 10 | 30 px | 4 |
+
+`updateLines` (`src/beam.c`) elige la dirección más cercana a la de la línea (como mucho a 9,2°) y pone los tramos uno detrás de otro sobre la línea de verdad, cada uno apoyado de nuevo en ella. La longitud es la proyección sobre esa dirección (dos multiplicaciones; se queda corta un 1,3 % como mucho) y los tramos se centran: lo que sobra, menos de un tramo, queda en los dos extremos, debajo de la nave y de la holo. Separación entre puntos: **2,8-3,6 px según la dirección**, la misma en el salto de un tramo a otro. Una línea de 150 px son 5 sprites en horizontal o en vertical, 8 en diagonal y 10 a 18°. Topes (`inc/beam.h`): 40 tramos entre todas las líneas (`BEAM_LINE_SPRITES`), a partes iguales, y 6 sprites de línea por franja de 8 px (`BEAM_LINE_BAND`). Sólo muerden con muchas holo: entonces los tramos de una línea se reparten a lo largo con huecos entre ellos.
+
+**Qué pierde el fondo.** Los 24 tiles salen del diccionario del fondo, `VTILE_SHARED_TILES` de 528 a **504**, regenerado con el mismo comando (`--tiles 504`). Con 24 entradas menos, las celdas de detalle que tenían entrada propia pasan a usar la más parecida: el error medio sube de 45,9 a **47,4 por canal (+3 %)** y cambian 14 073 de los 76 800 píxeles del campo (18 %), en celdas sueltas de detalle (hojas, piedras); la composición, los colores y las ruinas grandes no cambian. A tamaño real no se distingue. Capturas, mismo frame: antes `~/blastem_20261121_173725.png`, después `~/blastem_20261121_174011.png`. `trail.png` vuelve a 2 tiles (el punto azul suelto ya no hace falta).
+
+**Sprites por línea de pantalla** (tabla del VDP volcada con `vs` y contada línea a línea, arneses en el scratchpad): 1 holo en horizontal, 4 tramos, 9 entradas en total y como mucho 7 sprites en una línea; 1 holo en diagonal, 7 tramos, 12 entradas, 4 por línea; 3 holo (horizontal y dos diagonales), 18 tramos, 25 entradas, 9 por línea; 10 holo con la arena llena, 28 tramos, 77 entradas, 18 por línea (el VDP pinta 20). Capturas: `~/blastem_20261121_175027.png` (1 horizontal), `~/blastem_20261121_175047.png` (1 diagonal), `~/blastem_20261121_175107.png` (3), `~/blastem_20261121_175128.png` (10). Antes, con puntos sueltos, en el caso de 10 casi no salía ninguno; ahora salen 28 tramos, con huecos.
+
+**Un fallo previo arreglado de paso: el pool de sprites estaba lleno.** `MDSPR_POOL` era 256 y se pedían 293 ranuras (los bloques 8-10 sin commit): las 37 últimas, los puntos de los rayos y parte de los de las líneas a las holo, caían en la ranura sumidero y **no se dibujaban**. La estela fue la primera en notarlo (sus 13 sprites salían todos al sumidero). Ahora el pool es de 320 (se piden 316) y `Spr_check` para el juego al arrancar si vuelve a pasar, como `VTile_check`. Recorrer 60 ranuras aparcadas más costaba ~12 vueltas, así que los puntos de líneas y rayos (73) son ahora la **cola** del pool: el montador no la recorre mientras `Beam` diga que no hay ninguno a la vista (`Spr_tailVisible`), que es casi siempre. Con eso el pool más grande no cuesta nada en el caso peor.
+
+**VRAM y RAM.** `nextTile` **1434 de 1440** (`userTileMaxIndex`), leído en ejecución: la estela 2 tiles y los tramos de las líneas 24, pagados con los 24 que pierde el fondo. `Spr_check` pasa (316 ranuras pedidas de 320). RAM: `.data` + `.bss` = **27 148 bytes** (pool +64 ranuras, nave roja 288 B, estela, canales, tabla de inversos de las líneas 802 B).
+
+**ROM: 1 179 648 bytes (0x120000, 1,125 MB)**, antes del bloque 1 MB: +261 KB de PCM de MonsterLite y −150 KB de los nueve PCM del GML que se quitan. `rom_end` de `src/rom_header.c` pasa de 0x0FFFFF a **0x11FFFF**; `tools/check_header.py` compara con el tamaño real, no hace falta tocarlo. Hasta 4 MB no hace falta mapper.
+
+**Rendimiento** (`tools/measure.sh`, vueltas de 600 y bajas; antes del bloque, 505/34). La medida va al borde del frame: un coste pequeño mueve decenas de vueltas, y cualquier cambio en el uso de `random()` cambia la partida entera. Cada fila quita una cosa a la anterior, con la misma partida:
+
+| Build | Vueltas / bajas |
+|---|---|
+| Bloque 12 completo | **481 / 25** |
+| Sin hitstop (`PORT_NO_HITSTOP=1`) | 496 / 25 |
+| … y sin estela | 501 / 25 |
+| … y sin sonido | 523 / 25 |
+| 10 holo activas (`PORT_STRESS_HOLO`) | 308 / 24 (sin líneas, 361 / 28; en el bloque 9, con 3 puntos por línea, 333 / 26) |
+
+Lo que se puede decir: el **coste de CPU seguro es la estela** (~5 vueltas en el caso peor, 13 ranuras más y su código) y, sólo con muchas holo, las líneas (los tramos ahora se dibujan de verdad: 28 frente a casi ningún punto). El hitstop no gasta CPU: cambia el ritmo de la partida. **Quitar el sonido recupera 22 vueltas** en el bloque 12; el verificador midió 13 en el HEAD, donde había menos llamadas al driver (200 frente a 359 en su medida): que la parte del sonido "ya se pagaba antes" no está demostrado, sólo que el reparto de canales nuevo no cuesta más que el de antes con las mismas llamadas (498 = 498, medido antes de ampliar el pool). La bajada de bajas (34 → 25) es la partida, que es otra: con los `random()` de antes las bajas vuelven a 32.
+
+**Comprobado en BlastEm:**
+
+- Hitstop, ROM de estrés: ver arriba.
+- Cámara lenta, ROM normal manteniendo B: ver arriba. Nave roja: `~/blastem_20261121_154224.png`; sacudida al acabar, ya sin nave, con el HUD saliendo: `~/blastem_20261121_154226.png`.
+- Sacudida al empezar desde el splash: `~/blastem_20261121_154803.png` (los planos desplazados y envueltos).
+- Estela, en diagonal y en horizontal: `~/blastem_20261121_155040.png` y `~/blastem_20261121_155042.png`; en la tabla del VDP, 6 entradas de 8×8 detrás de la nave.
+- Líneas holo: ver arriba (`~/blastem_20261121_175027.png`, `175047`, `175107`, `175128`). Las de puntos sueltos de la primera entrega (`~/blastem_20261121_162533.png`, `163038`, `163122`) quedan como referencia del antes.
+- Sonido: punto de parada en `XGM2_playPCMEx` leyendo de la pila muestra, canal y prioridad, y contadores de sonidos pedidos y sonados en una copia (resultados arriba y en la tabla de pruebas). En partida no suena la música: `Audio_menuMusic` sólo se llama al entrar en el game over (y al salir, para pararla) y desde el interruptor de la tienda; la captura de llamadas no tiene `musMenu` hasta el game over.
+- `make`, `make GFXDEBUG=1` y `PORT_STRESS=1` (y `PORT_STRESS_HOLO`) sin avisos; `tools/check_header.py` bien.
+
+**Divergencias que introduce este bloque:**
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| Hitstop de 1 y 2 frames alternos (30 ms de media) | La consola va por frames de 20 ms (Q17) | Igual de media; cada baja suelta congela 20 o 40 ms |
+| El hitstop no se recupera | En Unity el `Sleep` congela la imagen pero `FixedUpdate` se pone al día en el frame siguiente (el tiempo real avanza); aquí el juego se para de verdad (Q17: "frames de pausa") | Una ráfaga de bajas alarga la partida unos frames |
+| El hitstop va después de la baja, no antes | Como la bomba (bloque 7) | Se congela con la explosión ya puesta |
+| Sin hitstop en las bajas de la cámara lenta | Simplificación | En MonsterLite alargaría la muerte 30 ms por baja |
+| La cámara lenta frena el mundo y no el fogonazo de `oMuerte` (del GML) ni las cuentas de frames del Update | `timeScale` frena lo escalado; las cuentas por frame de Update (paquetes, rayos, láser) en MonsterLite siguen a ritmo normal, el port frena todo lo del mundo | Durante 1 s los paquetes caducan a la quinta parte |
+| Sin la explosión roja de la muerte (`explosionSmall` en rojo) | No hay arte de MonsterLite y el del GML es el fogonazo de `oMuerte`, que se queda | Se ve el fogonazo del GML y la nave roja |
+| El game over sale al acabar la sacudida de la muerte (3 frames más tarde) | En MonsterLite sale en el mismo frame pero no cuenta mientras la cámara se sacude; así la banda del menú (plano A) no se sacude | La banda aparece 60 ms después |
+| Sacudida grande sin zoom | El VDP no escala (Q20) | — |
+| El HUD y el texto se sacuden con el campo | Van en el plano A; en MonsterLite son OnGUI | Con la grande (±80 px), el HUD salta 1-3 frames |
+| Las sacudidas no corren con el tiempo parado ni en el hitstop | Mover los planos con los sprites quietos los descuadraría | Una sacudida de 1-8 frames puede quedar a medias hasta que corre el tiempo |
+| Estela de puntos, gris, y sin línea de un borde al otro al hacer wrap | El VDP no traza líneas ni mezcla; en Unity el wrap tira una línea de lado a lado | La estela es punteada |
+| Líneas a las holo: tramos pre-dibujados de puntos de 2×2 a 2,8-3,6 px en 7 direcciones, con topes de 40 tramos y 6 por franja (decisión del usuario; direcciones y topes, invención) | El VDP no traza líneas; 80 sprites por frame y 20 por línea | Pequeños escalones donde la dirección de la línea cae entre dos de las 7; con muchas holo, huecos entre tramos |
+| Sin el tono aleatorio 0,9-1,1, sin los tonos que bajan (0,25 en el game over, que sube 0,1 por frame en partida) y la fanfarria de CARALLUDO a tono 2 fijo (en MonsterLite baja 0,1 por frame hasta 0,25) | XGM2 no cambia el tono de una muestra; los tonos fijos (ding ×3, fanfarria ×2) se aplican al convertir | Todo suena a su tono |
+| Una voz donde MonsterLite superpone varias (TWAY ×3, `bombaXPL` por enemigo, AWESOME en cada `OnGUI`) | 2 canales de efectos | Suena una vez |
+| Prioridades, grupos y reparto de canales | Invención del port | Con mucho a la vez, se pierden disparos e impactos antes que voces; un disparo nuevo corta al anterior |
+| Fondo de 504 tiles en vez de 528 | Decisión del usuario: VRAM para las líneas holo | +3 % de error medio en el fondo, en celdas de detalle sueltas |
+| Las voces de arma del GML siguen en el estante de la tienda, junto al botón corto | MonsterLite sólo toca el botón | — |
+| Las líneas holo se rehacen de 2 en 2 por frame cuando se mueve la nave (petición del usuario del 2026-11-22: que no se noten en el rendimiento) | Rehacer las 10 cada frame costaba un 15 % con 10 holo | Con 10 holo, cada línea va hasta 4 frames (~6 px) tarde; con 1-3, 1-2 frames |
+| ARENA suena al salir el splash tras encender o RESET | En MonsterLite el menú sólo se crea al cargar la escena | No vuelve a sonar tras el game over |
+| **Sin música en partida** | Decisión del usuario del 2026-11-21 (Q21 revocada) | MonsterLite tiene una pista `.xm` al azar en cada partida, en bucle, que baja de tono al parar el tiempo y de volumen al morir; el port, ninguna. En el menú y el game over sigue `musMenu` del GML |
+| La nave no se agranda a ×4 (`landingAnim`) en la muerte ni con el tiempo parado | 144 tiles por frame y quedan 6 | Se queda a su tamaño |
+| El fondo envuelto en la sacudida grande: exacto en horizontal; en vertical asoman 16 px de las filas 0-1 por encima | El plano mide 32 filas para 30 del campo | Sólo en la sacudida grande, 1-3 frames |
+
+#### Tercera entrega (2026-11-22): las líneas holo sin coste, y la explosión de la muerte
+
+**1. Las líneas a las naves holo no deben notarse en el rendimiento (petición del usuario).**
+
+Perfil antes de tocar nada (variantes en copias del scratchpad, `PORT_STRESS_HOLO`, vueltas de 600):
+
+| Build | Nave quieta (el arnés) | Nave moviéndose (mantiene la derecha) |
+|---|---|---|
+| Sin líneas | 362 / 28 | 366 / 26 |
+| Segunda entrega, con líneas | 308 / 24 (−15 %) | 317 / 23 |
+| Segunda entrega, calculando todo pero con los sprites aparcados | 310 | — |
+
+Es decir, el coste era **el cálculo**, no el dibujo: 4-5 multiplicaciones y un bucle por línea, y unas cuantas más por tramo, las 10 líneas en cada frame. Y con la nave quieta se recalculaba casi siempre: contado en RAM, de 259 llamadas en 600 frames, 159 recalculaban, 155 de ellas sólo porque había cambiado la sacudida (disparos y metralla la cambian casi cada frame).
+
+El sistema nuevo (`updateLines` y `buildLine`, `src/beam.c`):
+
+- **Lo hecho se guarda de un frame al siguiente.** Cada línea tiene su bloque fijo de tramos (40 entre las que haya) en un array propio, fuera del pool, con su posición sin sacudida, y su cuenta de sprites por franja (el tope global de 6 por franja se mantiene, restando y sumando sólo lo de la línea que se rehace).
+- **Si sólo cambia la sacudida**, se desplazan los sprites ya puestos (dos restas por sprite).
+- **Si se mueve la nave**, se rehacen 2 líneas por frame (`LINES_PER_FRAME`), por turnos. Con 10 holo cada línea va como mucho 4 frames tarde, unos 6 px a la velocidad de la nave, y su extremo queda debajo de ella. Si cambia el número de holo, se borran y vuelven a salir de 2 en 2 (rehacer las 10 de golpe se comía el frame).
+- **Si nada se mueve, no se hace nada**: la nave se mira cada frame y las holo, que no se mueven, una vez cada 16.
+- **Cálculo más barato** cuando sí toca: la dirección sale de una tabla de 32×32 (en vez de 6 multiplicaciones), los tramos que caben con una multiplicación (en vez de un bucle de hasta 25 vueltas) y, por tramo, dos sumas de 32 bits (en vez de 3 multiplicaciones).
+- **El montador sólo ve lo visible**: los tramos a la vista se copian seguidos al principio de la cola del pool (sólo en los frames en que se rehace alguna línea), y la cola se recorre hasta el último (`Spr_tailVisible` con un número de ranuras en vez de sí o no), sin pasar por huecos aparcados ni por los puntos de los rayos si no hay rayos.
+- **Los sprites de la cola ya no cuentan para la rotación por franjas llenas** (`overflowing`/`rotate`, `src/spr.c`): van al final de la tabla, así que si una franja se llena los que se pierden son ellos. Antes podían hacer rotar, y parpadear, los sprites del juego por culpa de una línea.
+
+Después (misma tabla):
+
+| Build | Nave quieta (el arnés) | Nave moviéndose |
+|---|---|---|
+| Sin líneas | 362 / 28 | 366 / 26 |
+| **Con líneas, sistema nuevo** | **354 / 28 (−2,2 %)** | **332 / 24 (−9 %)** |
+| Con líneas, 1 línea por frame | 354 / 28 | 342 / 24 (−6,6 %) |
+
+`tools/measure.sh` (sin holo): 482/25, igual que antes. Con la nave quieta, la diferencia queda en el borde del ±2 % pedido; lo que queda es sobre todo enseñar ~28 sprites más (su paso por el montador y su desplazamiento con la sacudida), que no se puede quitar sin enseñar menos. Con la nave moviéndose sigue costando un 9 %: dos líneas rehechas por frame. Si se acepta más retraso, una línea por frame lo deja en un 6,6 % con hasta 9 frames (unos 13 px) de retraso con 10 holo. Con 1-3 holo el retraso es de 1-2 frames. Capturas con el sistema nuevo: 1 holo `~/blastem_20261122_012910.png`, 3 `~/blastem_20261122_012930.png`, 3 con la nave moviéndose `~/blastem_20261122_012949.png`, 10 con la arena llena `~/blastem_20261122_013009.png` (25 tramos, como mucho 16 sprites en una línea de pantalla).
+
+VRAM sin cambios (1434 de 1440); pool sin cambios (316 de 320, `Spr_check` pasa); RAM +2,2 KB (tabla de direcciones 1 KB, tramos fuera del pool 720 B, franjas por línea 310 B): 29 368 bytes.
+
+**2. La explosión al morir (el usuario la prefería como antes del bloque 12).**
+
+Comparada frame a frame con una build de HEAD (`git archive HEAD` en el scratchpad, con los `.wav` del GML regenerados ahí con `tools/gm2md_audio.py`), leyendo `deathTimer`, `deathWhite` y `g_shakeX` en cada frame y con capturas:
+
+- **El destello blanco es igual en las dos.** El sprite de `oMuerte` crece los 4 primeros frames y después el color de fondo se pone blanco 11 frames (`deathWhite`), en HEAD y ahora, al mismo ritmo (en la cámara lenta el fogonazo va a su velocidad, `Effect_updateDeath`). Píxeles blancos en el mismo momento de la fase blanca: 6 885 en HEAD y 7 501 ahora. Capturas de HEAD: `~/blastem_20261122_005934.png`, `005935`, `005936`, `005937`; de ahora: `~/blastem_20261122_010036.png`, `010037`, `010039`.
+- **En HEAD no había sacudida.** `Effect_death` llamaba a `Shake_cruz()`, pero `Game_killPlayer` hacía `Shake_stop()` en el mismo frame y el menú no actualiza la sacudida: `g_shakeX` vale 0 en todos los frames tras morir. Es así desde el bloque 1 (`4628c56`); antes (`870597a`) no había `Shake_stop`.
+- **Lo que sí cambia** respecto a HEAD: la nave no desaparece, sigue en rojo 1 s con el mundo a cámara lenta y después hay 3 frames de sacudida grande; el game over (y su fogonazo rojo del fondo, con más de 10 puntos) sale 53 frames más tarde; y no suena `morteSnd` (quitado por decisión del usuario del 2026-11-21).
+
+No se ha cambiado nada: no hay sacudida que recuperar, y el destello está. Opciones, a falta de que el usuario diga qué echa de menos:
+
+- (a) dejarlo así;
+- (b) poner la sacudida del `oExplosionCruz` del GML (30 px, decayendo durante ~4 s) en el momento de morir, que es lo que el código de HEAD pretendía. Choca con la cámara lenta: mover los planos cada frame con los sprites quietos 4 de cada 5 frames los descuadraría. Se puede hacer que la sacudida avance sólo en los pasos del mundo (uno de cada 5 frames, a cámara lenta como todo) y recolocar la nave en esos pasos;
+- (c) quitar la cámara lenta y volver a la muerte de HEAD (game over en el acto), que es lo que más se parece a "como antes".
+
+**La bomba**: en HEAD usaba `Shake_cruz` (sacudida del GML de 30 px durante 8 frames y que después baja 0,14 px por frame, unos 4 s en total) y ahora `Shake_big(1)` de MonsterLite (un frame a ±80/±60 px). Visiblemente, la bomba ha perdido los ~4 s de temblor que se apagan poco a poco; a cambio da un golpe más fuerte de un frame y 5 frames de hitstop. No se ha cambiado.
+
+#### Correcciones tras la verificación (2026-11-21)
+
+| Observación del verificador | Qué se ha hecho |
+|---|---|
+| En combate sólo sonaba 1 de cada ~18 disparos de bala fina: el impacto (1,42 s, prioridad 5) se quedaba los dos canales | Disparos e impactos a la misma prioridad, cada uno en su grupo, y un sonido con grupo corta antes a otro de su grupo (`pickChannel`). Medido: 18/18 disparos y 18/18 impactos en una partida normal; 40/47 y 49/57 en el arnés de estrés (antes, 1/18 y 6/48 disparos) |
+| La nave a ×4 (`landingAnim`) en la cámara lenta | No cabe en VRAM (144 tiles por frame, quedan 6): divergencia documentada, con la alternativa (arriba y en la tabla) |
+| Franja con la última columna repetida en la sacudida grande | El fondo rellena las columnas de sobra con el otro lado del campo: envuelto exacto en horizontal; en vertical, lo más cercano que permiten 2 filas de sobra (arriba) |
+| `chEnd` con 266 muestras por frame: ARENA sonaba un frame más | Medido el ritmo real en PAL: 265,8 muestras por frame, 266 vale; el frame de más era truncar la división. Ahora se redondea hacia arriba, resuelto al compilar |
+| Comentarios desfasados (`src/game.c` sobre la sacudida y FIRST GAME, `inc/trail.h` y este documento sobre los tiles, la separación de 3 px en diagonal, la tabla de rendimiento) | Corregidos; la tabla de rendimiento dice ahora sólo lo medido |
+| Algunas líneas casi verticales salían a 2,87 px | Ya no aplica: con los tramos pre-dibujados la separación la fija el dibujo (2,8-3,6 px según la dirección). En la versión de puntos sueltos se corrigió con una longitud que nunca se pasa de la real (comprobado en Python en todas las líneas: mínimo 3,000 px) |
+
+#### Estudio de la música (Q21): descartado
+
+**Descartado por decisión del usuario del 2026-11-21:** no se convierten las pistas `.xm`, ni ahora ni después; en partida no hay música y en el menú y el game over sigue `musMenu`. Se deja el estudio tal como se hizo, por si se vuelve a abrir.
+
+**Qué hay.** `songsBatch` (`S/songsBatch.cs:12-16, 35-50`) tiene cinco campos `track_1`…`track_5`; en la escena apuntan a `Assets/Sound/track_1.xm`…`track_5.xm` (leído con UnityPy). `track_6.xm`, `My1stChiptuneSong.xm`, `My2ndChiptuneSong.xm`, `songTracker*.xm` (4,4 MB) y `serpentSong.wav` no los usa nadie. El `AudioSource` "Music" tiene `Loop` encendido y volumen 0,09 en la escena. `selectSong()` elige una al azar (`Random.Range(0, 5)`) en `Awake` y en cada `toGame()` (`S/gameControl.cs:375`): en el menú suena una al azar, y en cada partida otra. En partida (`S/gameControl.cs:268-311`, Update): con el tiempo parado el tono baja 0,1 por frame hasta 0 (~8 frames: se "para la cinta"); con el tiempo corriendo vuelve a subir 0,1 por frame hasta 1 y el volumen sube 0,2 por frame hasta 1; al morir (`slowDead`) el volumen baja 0,2 por frame (de 1 a 0 en 5 frames de Update, ~4 frames).
+
+Las cinco son módulos de MilkyTracker de 8 canales (5 en uso), un patrón de velocidad 6 a 125 BPM, sin efectos de salto:
+
+| Pista | Tamaño | Duración del bucle | Instrumentos con muestra | PCM a 13 300 Hz | a 6 650 Hz |
+|---|---|---|---|---|---|
+| track_1 | 28 715 B | 23,0 s | charles, caja, bombo, bajo y trémolo (bucles de 500 B) y uno de 300 B | 299 KB | 150 KB |
+| track_2 | 28 132 B | 38,4 s | charles, caja, bombo y una onda de 50 B en ping-pong | 499 KB | 249 KB |
+| track_3 | 27 548 B | 23,0 s | charles, caja, bombo, dos ondas de 500 B | 299 KB | 150 KB |
+| track_4 | 28 703 B | 46,1 s | sólo charles, caja y bombo | 598 KB | 299 KB |
+| track_5 | 28 092 B | 7,7 s | sólo charles, caja y bombo | 100 KB | 50 KB |
+| **Total** | 141 KB | | las tres de batería son las mismas en todas (22 KB) | **1,75 MB** | 0,88 MB |
+
+(Duraciones de un lector de XM en el scratchpad; Furnace renderiza `track_5` en 7,68 s, igual.) Es chiptune: batería muestreada y ondas cortas en bucle (cuadradas y de sierra), que es justo lo que hacen el PSG y el YM2612.
+
+**Opciones:**
+
+| | a) FM/PSG nativo (XGM2 desde VGM) | b) Renderizar a PCM | c) Híbrido: XGM2 con la batería en PCM y el resto en PSG |
+|---|---|---|---|
+| Cómo | Furnace (**instalado**, 0.6.8.3 en `/Applications/Furnace.app`) importa `.xm` ("detected a FastTracker module") a un sistema PCM genérico; se cambia el sistema a Genesis (YM2612 + SN76489), se rehacen los instrumentos (onda cuadrada → PSG, bajo → FM, batería → canal DAC con las tres muestras), se exporta VGM (`-vgmout`) y rescomp lo pasa a `XGM2` (con varias pistas en un recurso, comparten las muestras). DefleMask no importa XM y no está instalado | Furnace renderiza sin interfaz (`-output pista.wav`, probado con `track_5`) y se convierte como los efectos; `XGM2_playPCMEx(..., SOUND_PCM_CH1, 15, FALSE, TRUE)` en bucle | Como a), pero con los canales de onda pasados al PSG tal cual (sus bucles ya son cuadradas) y sin FM: menos arreglo |
+| ROM | ~5-15 KB por pista + 22 KB de batería: **< 100 KB** | **1,75 MB** (0,88 MB a media velocidad); la ROM pasaría de 1,25 a ~3 MB (cabe en 4 MB sin mapper) | < 100 KB |
+| Fidelidad | La de quien la arregle: notas y ritmo exactos, timbres parecidos | Exacta salvo 13 kHz y 8 bits (a 6,65 kHz pierde los platillos) | Muy alta en la batería y las cuadradas; el bajo sin FM suena más fino |
+| Trabajo | Manual, de horas por pista, con Furnace; no se automatiza | Automático: un script como `ml2md_audio.py` | Manual, menos que a) |
+| CPU | Z80 (el driver hace todo); el 68000 sólo arranca y para. La batería usa el canal 1 a ratos | Z80 y **bus del 68000**: el canal 1 sonando siempre; medido, un tercer canal PCM cuesta ~14 vueltas de 600 en el caso peor | Como a) |
+| Tono que baja al parar el tiempo | No hay cambio de tono en el driver: se aproxima con `XGM2_setMusicTempo` bajando a 0 y `XGM2_pause`, o con `XGM2_pause` directamente | Tampoco: lo más parecido es relanzar la muestra desde su posición a media velocidad (`halfRate`, una octava abajo) un par de frames y pararla | Como a) |
+| Volumen al morir | `XGM2_fadeOutAndStop(4)` (FM y PSG; ~4 frames, como el original) | XGM2 no tiene volumen de PCM: se para en seco (el original tarda ~4 frames: casi igual) | Como a) |
+| Pista al azar por partida | `XGM2_playTrack(random() % 5)` en `Game_start`, y otra en el splash | `XGM2_playPCMEx` de una de cinco muestras | Como a) |
+| Riesgos | El arreglo (timbres) depende de quien lo haga; xgm2tool tiene sus límites de PCM (las muestras de batería a 13,3 o 6,65 kHz) | Tamaño de la ROM; coste de bus en el caso peor; y la música del menú (`musMenu`, 333 KB del GML) habría que decidir si sigue | Pocos |
+
+**Recomendación (ya sin efecto: estudio descartado): c), y a) si se quiere más.** Las pistas ya son batería muestreada más ondas cuadradas: con Furnace se pasan casi tal cual a batería en el canal DAC/PCM del XGM2 y melodía en el PSG, pesan menos de 100 KB las cinco, no tocan el bus del 68000 más que la batería y dejan a mano `XGM2_fadeOutAndStop` para la muerte y `XGM2_pause`/`setMusicTempo` para el tiempo parado. Encaja con el reparto de canales de este bloque: el canal 1 queda para la batería de la música y los efectos siguen en el 2 y el 3. La b) es la única automática y la más fiel, pero cuesta 1,75 MB y un canal PCM sonando siempre, que en el caso peor se nota. Antes de empezar hay que decidir con el usuario: quién arregla las pistas en Furnace; si `musMenu` (del GML) se sustituye por la pista al azar del menú, como en MonsterLite; y si el tono que baja al parar el tiempo puede ser una pausa.
+
+
 ## Pruebas realizadas
 
 | Fecha | Prueba | Resultado |
 |---|---|---|
+| 2026-11-22 | Bloque 12, tercera entrega: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1`, `tools/check_header.py`, `tools/measure.sh` | ✅ sin avisos; ROM 1 179 648 bytes; 482/25; `nextTile` 1434 de 1440; pool 316 de 320 |
+| 2026-11-22 | Líneas holo: perfil (calcular sin enseñar, contar recálculos y sus motivos en RAM) y medidas con la nave quieta y moviéndose, con y sin líneas | ✅ 354/28 frente a 362/28 quieta (antes 308/24); 332/24 frente a 366/26 moviéndose (antes 317/23) |
+| 2026-11-22 | Muerte frame a frame contra una build de HEAD (`deathTimer`, `deathWhite`, `g_shakeX`, capturas) | Destello blanco igual en las dos (11 frames de fondo blanco); en HEAD `g_shakeX` siempre 0 |
+| 2026-11-21 | Bloque 12: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1` (y `PORT_STRESS_HOLO`), `tools/check_header.py` | ✅ sin avisos; ROM 1 179 648 bytes, `rom_end` 0x11FFFF |
+| 2026-11-21 | Bloque 12: `tools/measure.sh` y variantes en copias del scratchpad (sin hitstop, sin estela, sin sonido, política de canales de antes, 10 holo con y sin líneas) | ✅ 481/25 (antes 505/34); 10 holo 308/24; desglose en la sección del bloque 12 |
+| 2026-11-21 | Hitstop por RAM (ROM de estrés, `hitstopMs`, bajas y `now` de la estela frame a frame) | ✅ baja con bala: 1 frame (30 → 10) y la siguiente 2 (40 → 20 → 0); baja de metralla: 0 |
+| 2026-11-21 | Muerte por RAM (`g_state`, `dyingFrames`, `bigLeft`, `g_shakeX/Y`, x de la cabeza de gusano) y capturas | ✅ 50 frames de cámara lenta con el mundo a un paso de cada 5, nave roja, 3 de sacudida dentro de ±80/±60 y game over |
+| 2026-11-21 | Sacudida al salir del splash | ✅ 3 frames: (−46, −34), (19, 16), (−28, −15); sin sacudida con el PLAY del game over |
+| 2026-11-21 | Estela: tabla del VDP y capturas | ❌ los 13 sprites caían en la ranura sumidero: el pool (256) estaba lleno desde antes del bloque, con 293 pedidas (los puntos de rayos y líneas no se veían); ✅ pool de 320 con `Spr_check`, 316 pedidas, 6 puntos detrás de la nave |
+| 2026-11-21 | Sonido: punto de parada en `XGM2_playPCMEx` (muestra, canal y prioridad de la pila), tres tramos de partida | ✅ ARENA al salir el splash (canal 3, 13); impactos `mlXpl` (5) y metralla del GML (`sfxAranaMorte` + `sfxDust`); la bala fina (3) no entra mientras los dos canales tienen algo de más prioridad; `sfxMorte` (7) al morir; 54 frames después, `musMenu` (canal 1, 15) y AWESOME (13) con récord; con 2 puntos, CARALLUDO en el primer paso de la cuenta; ❌ con el ding a prioridad 1 la cuenta salía muda (la muerte del GML ocupaba el otro canal); ✅ a prioridad 8, un ding por paso en el canal 2 |
+| 2026-11-21 | Líneas holo de puntos sueltos (primera versión, sustituida): arneses de 1, 3 y 10 holo | 1 holo: 17 puntos a ~8 px en una línea casi plana; 3 holo: ~12 px; 10 holo: los puntos casi no salen. 327/24 con 10 holo |
+| 2026-11-21 | VRAM y RAM en ejecución | ✅ `nextTile` 1434 de 1440 (fondo de 504); `Spr_check` con 316 de 320; `.data` + `.bss` = 27 148 bytes |
+| 2026-11-21 | Disparos y impactos que suenan (contadores en RAM en una copia) | ❌ reparto de la primera entrega: 1/18 disparos en partida normal, 6/48 en estrés; ❌ disparos por encima: 3/18 impactos; ✅ grupos: 18/18 y 18/18; 40/47 y 49/57 |
+| 2026-11-21 | Ritmo del driver XGM2 en PAL (copia que mira cuándo deja de sonar ARENA) | ✅ 69 376 muestras en 261 frames: 265,8 por frame |
+| 2026-11-21 | Sacudida grande con el fondo envuelto (`bigLeft` alargado por RAM) y capturas | ✅ sin franja repetida; el otro lado del campo por cada borde |
+| 2026-11-21 | Fondo de 504 tiles: capturas antes y después en el mismo frame | ✅ 14 073 de 76 800 píxeles distintos, en celdas sueltas de detalle; RMSE 45,9 → 47,4 |
+| 2026-11-21 | Líneas holo en tramos: arneses de 1 (horizontal y diagonal), 3 y 10 holo; `vs` contado línea a línea | ✅ 4 / 7 / 18 / 28 tramos; como mucho 7 / 4 / 9 / 18 sprites en una línea de pantalla |
+| 2026-11-21 | Fuera la muerte del GML y nueve PCM del GML: grep de cada nombre | ✅ ninguna referencia fuera de la tabla de `audio.c` antes de quitarlos; compila sin avisos |
+| 2026-11-21 | Botón RESET: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1`, `tools/check_header.py`, `tools/measure.sh`; en BlastEm `ui.soft_reset` a los 200 f del splash, en partida (dos RESET seguidos) y tras comprar LASER en GEAR y apagar el sonido | ✅ sin avisos; 505/600 y 34 bajas (igual que antes); sin el arreglo, "VRAM: 1753 de 1425 tiles" (`nextTile` 1432 → 1769); con él, `nextTile` 1432, splash, saldo 0, compradas 0x1, arma 0, sonido y música encendidos, y la partida siguiente arranca bien |
+| 2026-11-21 | Sin SRAM: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1`, `tools/check_header.py`, `tools/measure.sh`; RAM a los 200 f de encender; captura del splash | ✅ sin avisos; cabecera sin SRAM (12 espacios en 0x1B0); 505/600 y 34 bajas; `save.sram` sin cambios; saldo 0, récord 0, arma 0 (WBLOCK), compradas 1, sonido y música encendidos |
+| 2026-11-20 | Bloque 9: `make`, `make GFXDEBUG=1`, `PORT_BENCH=1` con `PORT_VRAM_REPORT=1`, `PORT_STRESS=1` (también con `PORT_STRESS_MORTAL` y `PORT_STRESS_HOLO`), `PORT_PROF=2`, `tools/check_header.py` | ✅ sin avisos; cabecera bien |
+| 2026-11-20 | Bloque 9: `tools/measure.sh` (dos pasadas y dos disposiciones del código) y con `PORT_STRESS_HOLO` | ✅ 509/600 y 37 bajas (HEAD 508/37); con 10 holos 334/26 (HEAD 333/26) |
+| 2026-11-20 | Bloque 9, arreglos finales: "!!!" en la fila 12 (Q22), descendentes con sombra; las 7 variantes, `tools/check_header.py`, `tools/measure.sh` | ✅ capturas de "!!!" con la nave en (160, 120) y con el mensaje de nivel, y de la tienda; medidas en el texto |
+| 2026-11-20 | Bloque 9, deslizamiento, sombra y SCORE en grande: las 7 variantes, `tools/check_header.py`, `tools/measure.sh` (y dos disposiciones), `PORT_STRESS_HOLO`, capturas en PAL y NTSC, game over, tienda, depurador | ✅ sin avisos; 509/37 (509, 509) y 333/26; VRAM 1432 de 1440 |
+| 2026-11-20 | Bloque 9: mensajes por RAM y en capturas (ARENA!, nivel, "!!!", HOLD, salto de COINS), reborde rojo con texto encima, segunda partida, NTSC, depurador de gráficos | ✅ 25 / 155 / 26 / 4 f; letras compuestas sin cortar los agujeros; 0 letras sin componer con todo forzado; VRAM 1434 de 1440 |
 | 2026-11-20 | Bloque 8: `make`, `make GFXDEBUG=1`, `PORT_BENCH=1` con `PORT_VRAM_REPORT=1`, `PORT_STRESS=1` (también con `PORT_STRESS_MORTAL` y `PORT_STRESS_HOLO`), `PORT_PROF=2`, `tools/check_header.py` | ✅ sin avisos |
 | 2026-11-20 | Araña por RAM en el arnés, niveles 1 y 9 (velocidad, rumbo, destino, temporizador, fracción de giro) | ✅ dentro de los rangos de §2.6; re-sorteo a los 167 f de juego y luego cada 26 f (ATTACK) y 14 f (WANDER, nivel 1) |
 | 2026-11-20 | Gusano con el tiempo parado (ROM normal, soltando B) | ✅ quieto 40 frames con el temporizador bajando 6 por frame |

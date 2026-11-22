@@ -13,9 +13,10 @@ u16 MLPow_clearEnemies(void)
 {
     const u16 n = Enemy_explodeAll() + Snake_explodeAll();
 
-    // SoundManager.playBombaClip, una vez por enemigo: aquí una sola, que
-    // superpuestas en el mismo frame suenan igual.
-    if (n) Audio_sfx(SFX_BOMBA);
+    // SoundManager.playBombaClip (bombaXPLSnd), una vez por enemigo
+    // (S/enemyController.cs:175), y sólo si no suena nada (!isPlaying): aquí
+    // una sola, que superpuestas en el mismo frame suenan igual.
+    if (n) Audio_sfx(SFX_ML_XPL);
 
     return n;
 }
@@ -66,8 +67,8 @@ u16 MLPow_tickRays(void)
     if (--rayTimer == 0)
     {
         // randomExplosion en la posición del rayo, que es donde estaba la
-        // nave al tocar el power-up.
-        Effect_spawn(rayOX, rayOY);
+        // nave al tocar el power-up. Sin sonido propio: el de clearEnemies.
+        Effect_spawnQuiet(rayOX, rayOY);
         rayCount = 0;
         return MLPow_clearEnemies();
     }

@@ -300,9 +300,10 @@ void Effect_death(fix16 x, fix16 y)
     VStream_frame(&deathStream, deathSprite, muerteSprite.animations[0]->frames[0]);
     sprPos(deathSprite, F2I(x) - (MUERTE_CELL / 2), F2I(y) - (MUERTE_CELL / 2));
 
-    // oMuerte/Step_0 deforma la vista cada frame; lo más parecido que hay
-    // aquí es la sacudida del oExplosionCruz.
-    Shake_cruz();
+    // oMuerte/Step_0 deforma la vista cada frame, y el port lo imitaba con la
+    // sacudida del oExplosionCruz (que Game_killPlayer cortaba en el acto).
+    // Desde el bloque 12 la muerte es la de MonsterLite: cámara lenta y, al
+    // acabar, la sacudida grande (ver Game_killPlayer).
 }
 
 bool Effect_deathActive(void)
@@ -377,9 +378,19 @@ static void kill(Effect *e)
 
 void Effect_updateAll(void)
 {
+    deathUpdate();
+    Effect_updateWorld();
+}
+
+void Effect_updateDeath(void)
+{
+    deathUpdate();
+}
+
+void Effect_updateWorld(void)
+{
     u16 i;
 
-    deathUpdate();
     bombUpdate();
 
     for (i = 0; i < MAX_EFFECTS; i++)

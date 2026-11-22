@@ -283,8 +283,8 @@ Detalle de cada una:
 |---|---|---|
 | Arriba a la izquierda | `BULLETS<n>` (munición del arma equipada), debajo el icono del arma y su nombre (`WBLOCK`, `LASER`, `TWAY`, `CIRCULAR`, `MOIRE`) | 285-314 |
 | Arriba a la derecha | `<n>SCORE`, debajo `<best>BEST` (récord en amarillo), `LEVEL <n>`, `UPGRADE AT: <factorLevel·(level+1)>` | 323-363 |
-| Abajo en el centro | `COINS <saldo>` (saldo total guardado, no el de la partida); se agranda 10 llamadas de `OnGUI` al recoger | 373-398 |
-| Centro | "ARENA!" al empezar; "LEVEL n / NEXT UPGRADE: SCORE x" al subir; "!!!" en rojo 30 frames de `Update` (25 f) en la oleada 27; "KEEP YOUR FINGER ON SCREEN!" al congelarse | 236-246, 468-507 |
+| Abajo en el centro | `COINS <saldo>` (saldo total guardado, no el de la partida), centrado en W/2 + W/36; al recoger, 10 llamadas de `OnGUI` (4 f) con un rectángulo 2,5 veces más alto y más abajo: el texto, centrado en él, se va casi entero por debajo de la pantalla (no "se agranda": la fuente es la misma) | 373-398 |
+| Centro | "ARENA!" al empezar; "LEVEL n / NEXT UPGRADE: SCORE x!" al subir; "!!!" en rojo en la oleada 27, 31 frames de `Update` (26 f: `oleadaT` empieza en 30 y se borra al pasar de 0) y, por el estilo centrado, en realidad en la esquina de abajo a la derecha, casi fuera de la pantalla (ver Q22); "KEEP YOUR FINGER ON SCREEN!" al congelarse | 236-246, 468-507 |
 
 La leyenda de iconos (COINS, AMMUNITION, DELAYED RAYS, INSTANT BOMB, HOLO SHIPS, `S/HUD.cs:91-103`) se prepara pero **no se dibuja** en ningún sitio.
 
@@ -373,9 +373,11 @@ O sea: el contador acelera, 5000 puntos se cuentan en menos de 2 s, las monedas 
 
 ### 2.12 Sonido y efectos
 
-- **Música**: 5 pistas (`track_1` a `track_5`, módulos `.xm` en `Assets/Sound/`), una al azar en cada partida (`S/songsBatch.cs:45-50`). Al congelarse baja de tono 0,1 por frame; al morir baja de volumen.
+- **Música**: 5 pistas (`track_1` a `track_5`, módulos `.xm` en `Assets/Sound/`), una al azar en cada partida (`S/songsBatch.cs:45-50`). Al congelarse baja de tono 0,1 por frame; al morir baja de volumen. **El port no la tiene en partida** (Q21 revocada, 2026-11-21).
 - **Efectos** (`P/SoundManager.prefab`, biblioteca de `S/SoundManager.cs`): disparo normal, WBLOCK, láser (también para MOIRE), TWAY, CIRCULAR, explosiones (polvo, bomba, bomba pequeña, bomba amarilla), recoger paquete o moneda, interferencia, botones corto y largo, "ding". Voces: risa, bolas, tres vías, láser, repetea (al activar una nave holo), rayos, fantasma, bomba, boom, caralludo, crispado, y las de mujer "ARENA", "RAYS", "EXPLOSIONS", "AWESOME". `circularSpeechSnd` está vacío.
+  - **Corrección (bloque 12):** la biblioteca que vale es la del `SoundManager` de la **escena** (`MonsterLite.unity`); la del prefab es vieja y no tiene las voces de mujer ni el "ding". "CARALLUDO" es `Fafarre.aiff`, una fanfarria. **Sólo tienen llamada** los disparos, `bombaXPL` (impacto de bala y `clearEnemies`), bomba amarilla, recoger, boom, repetea, las cuatro de mujer, caralludo, ding y los dos botones. Risa, crispado y tres vías están comentadas; fantasma, bolas, láser hablado, bomba hablada, interferencia, polvo y bomba pequeña no las llama nadie. La tabla completa, con archivo y línea, en `docs/PORT_AUDIT_GML.md`, bloque 12.
 - **Sacudida grande** (`shake`, `S/cameraScript.cs:15-45`): durante `t` frames cambia el tamaño de la cámara a un entero aleatorio entre 0 y 5 (**zoom**) y la desplaza ±4 u en X y ±3 u en Y (**±80 / ±60 px**). Pequeña: §2.5.
+- **Estela de la nave**: `TrailRenderer` del hijo "nave" de `P/player.prefab`, 0,26 s (13 f), de 1,6 px de ancho a nada, blanca con alfa 0,44-0,94, un vértice cada 2 px.
 - **Cámara lenta de la muerte**: `timeScale` 0,2 durante 1 s real (§2.1).
 - **Fondo**: color de cámara (124,181,138) en la escena y (166,184,144) al empezar partida, más un fondo de tiles (`BackgroundScript`) y polvo (`backgroundDetails`).
 
@@ -412,22 +414,22 @@ Estado: **falta** (no existe en el port), **distinto** (existe con otro comporta
 | Munición | por arma, sólo del arma equipada; **no se reinicia entre partidas** | **bloque 3**: por arma (`g_ammo`), se conserva hasta apagar (Q10) | igual | Q10 |
 | Munición por paquete | 10 / 4 / 10 / 4 / 3 | **bloque 3**: 10 / 4 / 10 / 4 / 3; PIVOT 5 y PARA 8 (GML) | igual | — |
 | Paquetes | 50 % por baja, caducan a los 167 f | **bloque 4**: 50 % por baja con disparo, caducan a los 167 f, suben al recogerlos | igual | — |
-| Monedas | 50 % por baja, valor por nivel, saldo persistente; se pierden si nacen sobre un agujero u otra moneda | **bloque 4**: 50 % por baja, valor por nivel, saldo `g_coins` (hasta apagar; SRAM en el bloque 6), COINS en el HUD; no se pierden (Q12) | igual | sprite nuevo (§4); el GML no tiene arte de moneda (Q11) |
+| Monedas | 50 % por baja, valor por nivel, saldo persistente; se pierden si nacen sobre un agujero u otra moneda | **bloque 4**: 50 % por baja, valor por nivel, saldo `g_coins` (hasta apagar; sin SRAM, decisión del usuario del 2026-11-20), COINS en el HUD; no se pierden (Q12) | igual | sprite nuevo (§4); el GML no tiene arte de moneda (Q11) |
 | Bomba | power-up de oleada; mata **todo** y puntúa | **bloque 7**: oleada 3, mata todo y suma `level` por enemigo, congela 5 f | igual (sacudida y voces del GML hasta el bloque 12) | reutiliza el arte |
 | Rayos | power-up de oleada; a los 25 f mata todo y puntúa | **bloque 7**: oleada 4, un rayo a cada enemigo, a los 26 f (25,8) mata todo y puntúa, congela 5 f | igual (3 puntos por rayo) | reutiliza el arte; la línea del rayo con puntos (`dotSprite`) |
 | Naves holo | hasta 10, se activan al tocarlas, cadencia 33 f sin munición, mueren al contacto | **bloque 7**: oleadas 6, 16, 19-21, hasta 10, valores de MonsterLite, arte de la réplica del GML | igual | 10 activas con la arena llena: 314/600 en el arnés (medido, Q3) |
-| HUD | BULLETS + icono y nombre del arma; SCORE, BEST, LEVEL, UPGRADE AT; COINS | BULLETS, KILLS, LAST (`inc/hud.h`) | distinto | la fuente grande sólo tiene `BULETSKIA0123456789OPNXre` (`res/gm_art.h:104`) |
-| Mensajes de partida | ARENA!, LEVEL n / NEXT UPGRADE, !!!, KEEP YOUR FINGER | no existen | falta | texto |
+| HUD | BULLETS + icono y nombre del arma; SCORE, BEST, LEVEL, UPGRADE AT; COINS | **bloque 9**: la línea `BULLETS<n> <n>SCORE` con los glifos grandes del GML (C y R dibujadas en su estilo); icono del arma a 16×16 y su nombre, BEST (cifras en amarillo), LEVEL, UPGRADE AT y COINS (en amarillo) con la fuente del sistema (Q16); COINS abajo con el alto que se ve (fila 28 en PAL, 26 en NTSC); el grupo de arriba entra y sale deslizándose y todas las fuentes llevan sombra (decisión del usuario); sólo se escribe lo que cambia, por la cola de DMA | igual, con divergencias menores (deslizamiento a escalones de 8 px, SCORE hasta 999 999, Q23) | ver la auditoría, "Bloque 9" |
+| Mensajes de partida | ARENA!, LEVEL n / NEXT UPGRADE, !!!, KEEP YOUR FINGER | **bloque 9**: "ARENA!" (25 f), "LEVEL n / NEXT UPGRADE: SCORE x!" (155 f de tiempo corriendo), " !!!" en rojo (26 f) y "HOLD A/B/C" (Q8), con la fuente del sistema y compuestos encima de los agujeros sin cortarlos | igual; "!!!" centrado en la fila 12 en vez de en la esquina (Q22, decisión del usuario) | reserva de 32 tiles para las letras encima de los agujeros |
 | Game over | cuenta SCORE y COINS COLLECTED con ritmo que acelera (§2.8), LEVEL, NEW RECORD!, BEST SCORE, PLAY/GEAR | interludio KILLS/TOP/NEXT | distinto | ritmo y "ding" (Q15) |
 | Tienda | comprar armas con monedas, elegir una, sonido/música | no existe | falta | pantalla nueva con la fuente del sistema |
 | Desbloqueo | compra: 6000 / 12000 / 24000 / 48000 monedas | récord de kills > 40 / 60 / 80 / 100 (`src/game.c:110-122`) | distinto | Q14, Q9 |
-| Guardado | récord, arma, partidas, sonido, música, monedas, armas compradas | nada; la cabecera no declara SRAM (`src/rom_header.c:22-27`) | falta | SRAM (§4) |
-| Logros | ninguno | ninguno | falta (diseño nuevo) | Q18 |
+| Guardado | récord, arma, partidas, sonido, música, monedas, armas compradas | **sin guardado, por decisión del usuario (2026-11-20)**: récord, saldo, armas compradas, arma equipada, sonido y música viven en RAM hasta apagar, y al encender arrancan como una partida nueva; la cabecera no declara SRAM (`src/rom_header.c`). El bloque 6 llegó a guardarlos en SRAM y se retiró | divergencia decidida | — |
+| Logros | ninguno | ninguno | **bloque 10**: 17 logros inventados (Q18) con recompensa en monedas (14 950 en total), aviso en la fila 26 y lista desde la tienda ("ACHIEVEMENTS n/17"); en RAM hasta apagar o RESET | diseño nuevo (invención) | — |
 | Tutorial | desactivado | no existe | falta | Q19 |
 | Hitstop | 30 ms por baja con bala (fina o gorda), 100 ms por bomba y por rayos | no | falta | 1-2 f y 5 f (Q17) |
 | Cámara lenta de la muerte | ×0,2 durante 1 s | fogonazo `oMuerte` (GML) | distinto | ralentizar = actualizar 1 de cada 5 frames |
 | Sacudidas | pequeña ±4 px por disparo; grande con zoom y ±80/±60 px | sacudida del GML por scroll | distinto | el zoom no existe en el VDP (Q20) |
-| Fondo | color plano que deriva con el nivel; rojo en game over | imágenes seleccionables (bosque, ruinas, campo de batalla) | distinto | Q16 |
+| Fondo | color plano que deriva con el nivel; rojo en game over | la imagen de ruinas (Q16); el fogonazo rojo del game over desde el bloque 5; **sin color por nivel**: `setCameraLevelColor` no se porta (Q16, bloque 9) | divergencia deliberada (Q16) | — |
 | Música | 5 pistas `.xm` al azar | `musMenu` del GML | distinto | XM → XGM, coste de ROM (Q21) |
 | Voces y efectos | lista de §2.12 | 20 sonidos del GML | distinto | WAV a 13300 Hz por XGM2 |
 
@@ -435,13 +437,14 @@ Estado: **falta** (no existe en el port), **distinto** (existe con otro comporta
 
 ## 4. Coste estimado de recursos de lo que falta
 
-**Situación de partida** (dato del usuario y `inc/vramspr.h`): la VRAM de tiles está llena, con **1 tile libre**. (Desde el bloque 2 hay **36 libres**: los agujeros sólo suben las celdas con dibujo, y 10 se reservan para el texto compuesto encima de los agujeros; ver la auditoría. La VRAM sobrante de `VTile_allocSpare` está llena.) El fondo del campo tiene **528** reservados (`VTILE_SHARED_TILES`), y los tiles del menú (iconos de arma 80, logo 49, barra 1) van a la VRAM sobrante fuera del espacio de SGDK (mapa del plano window, 128 tiles, y la cola tras la tabla de sprites, 76). RAM: `.data` + `.bss` = **13 740 bytes** (`m68k-elf-size out/release/rom.out`). ROM: 896 KB (`out/rom.bin`, 917 504 bytes), por debajo de los 2 MB, así que la SRAM en 0x200001 no choca con el ROM.
+**Situación de partida** (dato del usuario y `inc/vramspr.h`): la VRAM de tiles está llena, con **1 tile libre**. (Desde el bloque 2 hay **36 libres**: los agujeros sólo suben las celdas con dibujo, y 10 se reservan para el texto compuesto encima de los agujeros; ver la auditoría. La VRAM sobrante de `VTile_allocSpare` está llena.) El fondo del campo tiene **528** reservados (`VTILE_SHARED_TILES`), y los tiles del menú (iconos de arma 80, logo 49, barra 1) van a la VRAM sobrante fuera del espacio de SGDK (mapa del plano window, 128 tiles, y la cola tras la tabla de sprites, 76). RAM: `.data` + `.bss` = **13 740 bytes** (`m68k-elf-size out/release/rom.out`). ROM: 896 KB (`out/rom.bin`, 917 504 bytes), por debajo de los 2 MB, así que la SRAM en 0x200001 no choca con el ROM. (Desde el 2026-11-20 no hay SRAM: decisión del usuario, ver el bloque 6.)
 
 | Elemento | VRAM (tiles) | Sprites de hardware | RAM | SRAM | Notas |
 |---|---|---|---|---|---|
 | Puntuación `u32`, nivel, `factorLevel`, temporizador de oleadas, tabla de oleadas | 0 | 0 | ~20 B (tabla en ROM) | — | — |
-| Mensajes LEVEL / !!! / ARENA! / UPGRADE AT | 0 con la fuente del sistema; ~20 con la grande (faltan C, R, V, G, D: 5 glifos de 2×2) | 0 | — | — | decidir fuente (Q16) |
-| Icono del arma en el HUD | 16 (4×4) o 4 (2×2); 0 si sólo se escribe el nombre | 0 (plano A) | — | — | ML lo enseña en partida; ahora los iconos sólo están en VRAM sobrante |
+| Mensajes LEVEL / !!! / ARENA! / UPGRADE AT | **Hecho (bloque 9)**: fuente del sistema (Q16); +22 para la reserva de letras encima de los agujeros (de 10 a 32), +11 para las cifras amarillas y la admiración roja | 0 | ~9,4 KB (siluetas de la fuente, agujeros verdes y filas de texto en RAM) | — | ver la auditoría |
+| Icono del arma en el HUD | **Hecho (bloque 9)**: 4 (2×2), el icono del menú reducido a la mitad al empezar la partida | 0 (plano A) | — | — | pagado, con lo anterior, quitando de VRAM los 9 glifos grandes que ya no se usaban (36 tiles): 1433 → 1434 de 1440 |
+| SCORE en grande y sombra | **Hecho (bloque 9)**: +12 (C, O y R grandes); la sombra va pintada en los tiles que ya había (0) | 0 | — | — | pagado con 14 celdas de la variante roja de los agujeros que eran iguales a la normal: 1432 de 1440 |
 | Iconos MOIRE y CIRCULAR del menú/tienda | 0 netos: sustituyen a los de PIVOT y PARA en `weapons.png` (5 iconos de 4×4 = 80) | 0 | — | — | el GML no tiene arte para estas dos armas; tomarlo de `Assets/Art/iconMoire.png` e `iconCirculo.png` **choca con la decisión 3** (Q11) |
 | Moneda | **4** (1 frame de 2×2) a **24** (los 6 frames precargados); o 4 por hueco con VStream | hasta ~8 a la vez | ~100 B (8 × x, y, vida, valor, frame) | — | lo único imprescindible en partida que no tiene arte cargado; el GML no tiene moneda, así que o se toma `coinAnimation.png` de Unity (**choca con la decisión 3**) o se dibuja (Q11) |
 | Balas (pool) | 0 | se destruyen al salir de pantalla (§2.5): TWAY ≤ ~35 con la nave en una esquina, ~18 desde el centro; WBLOCK ≤ 9; fina ≤ 5; naves holo ≤ 2 por nave | ~35 × 12 B | — | el pool actual es `MAX_PROJECTILES` 14 y el total de objetos `Sprite` de SGDK va por 79 de 80 (`inc/arena.h:372-376`): TWAY no cabe sin recortar o sin reorganizar los pools (Q3) |
@@ -450,9 +453,10 @@ Estado: **falta** (no existe en el port), **distinto** (existe con otro comporta
 | Bomba, rayos y nave holo | 0: reutilizan `groundSprite` y la réplica | rayos: un punto por segmento × enemigos; naves: hasta 10 + líneas | ~10 × 16 B | — | 10 naves y sus líneas no caben en sprites por línea: tope |
 | Gusano de 17 partes (sólo si se reabre la decisión 4, Q2) | 0 (mismo arte) | +4 por gusano frente al de 13 | migas: 17 × 4 B por gusano (menos que el historial de 128 posiciones actual) | — | CPU: +30 % por gusano |
 | Tienda, game over, logros, tutorial | 0 con la fuente del sistema; el arte del menú ya está en VRAM sobrante | 0 | ~32 B de estado | — | sólo texto |
-| Logros | 0 | 0 | 4 B de máscara + ~16 B de contadores | (incluido abajo) | — |
-| Guardado | 0 | 0 | copia en RAM ~64 B | **~64 B por copia, 2 copias + suma de control ≈ 130 B** (en bytes impares: 260 bytes de dirección). Declarar 8 KB en 0x200001-0x203FFF | cabecera: `sram_sig "RA"`, tipo 0xF820; `SRAM_enable/readWord/writeWord/disable` de SGDK (`$GDK/inc/sram.h`) |
-| Música XM | 0 | 0 | — | — | ROM: depende de la conversión |
+| Logros | **Hecho (bloque 10)**: 0 (fuente del sistema y cifras amarillas del bloque 9; `nextTile` sigue en 1432 de 1440) | 0 | ~37 B (máscara, monedas recogidas, siguiente umbral, cola de 17 avisos y estado del aviso y de la lista) | ninguna (sin SRAM) | `tools/measure.sh` sin cambio: 505/34 |
+| Guardado | 0 | 0 | — | **ninguna** (decisión del usuario del 2026-11-20: el progreso vive en RAM hasta apagar) | el bloque 6 llegó a usar ~130 B en 8 KB declarados en 0x200001-0x203FFF; retirado, la cabecera ya no declara SRAM |
+| Música XM | 0 | 0 | — | — | **No se porta** (Q21 revocada, 2026-11-21) |
+| Efectos y voces de MonsterLite, estela, líneas holo | **Hecho (bloque 12)**: estela 2 tiles y tramos de las líneas 24, pagados bajando el fondo de 528 a 504: `nextTile` 1434 de 1440 | estela ≤ 13, líneas ≤ 40 tramos | ~2,6 KB (pool de sprites de 256 a 320, nave roja, estela, inversos) | — | ROM +261 KB de PCM de MonsterLite y −150 KB del GML: 1,125 MB |
 
 **Total en partida**: entre **4 y ~60 tiles** según se elija (moneda, icono del HUD y glifos). Con 1 libre, hay que sacarlos de algún sitio:
 
@@ -512,7 +516,7 @@ Cada bloque dice qué preguntas de §6 tiene que tener respondidas antes de empe
 
 ### Bloque 6. Guardado en SRAM
 
-- **Estado (2026-11-16)**: **hecho**. Detalle en `docs/PORT_AUDIT_GML.md`, "Bloque 6: guardado en SRAM".
+- **Estado (2026-11-21)**: **retirado por decisión del usuario (2026-11-20)**: el juego no usa SRAM; el progreso vive sólo en RAM y se pierde al apagar. Se hizo el 2026-11-16 y se quitó entero (`src/save.c`, `inc/save.h` y la SRAM de la cabecera). Lo que sigue describe lo que se hizo entonces. Detalle en `docs/PORT_AUDIT_GML.md`, "Bloque 6: guardado en SRAM" y "Sin SRAM".
 - **Bloqueado por**: nada nuevo (lo que se guarde de la munición sale de Q10).
 - **Incluye**: estructura con firma, versión, récord (`u32`), saldo (`u32`), armas compradas (máscara), arma equipada, partidas jugadas, sonido y música, logros (máscara + contadores) y suma de control; dos copias alternas para que un apagado a mitad de escritura no lo pierda todo; carga al arrancar con valores por defecto si la firma o la suma no cuadran; guardado al entrar en game over (como `setData`) y al comprar. Cabecera del cartucho con SRAM declarada.
 - **Archivos**: `inc/save.h` y `src/save.c` nuevos, `src/rom_header.c` (`sram_sig`, `sram_type`, `sram_start`, `sram_end`, y el comentario que explica por qué antes no había), `src/game.c`, `src/menu.c`.
@@ -536,28 +540,31 @@ Cada bloque dice qué preguntas de §6 tiene que tener respondidas antes de empe
 
 ### Bloque 9. HUD, mensajes de partida y fondo por nivel
 
+- **Estado**: hecho (2026-11-20), ver `docs/PORT_AUDIT_GML.md`, "Bloque 9". El color de fondo por nivel no se porta (Q16). Q22 resuelta (fila 12); queda Q23 (balas que no caben junto a la puntuación). Con el deslizamiento del HUD, la sombra en todas las fuentes y SCORE en grande, por decisión del usuario.
 - **Bloqueado por**: Q16 (fondo y fuente).
-- **Incluye**: BULLETS + arma, SCORE, BEST, LEVEL, UPGRADE AT, COINS; "ARENA!", "LEVEL n / NEXT UPGRADE: SCORE x" (155 f), "!!!" (25 f) y la versión definitiva del aviso de congelación del bloque 2. **Fondo que cambia con el nivel** (§2.3, `setCameraLevelColor`): en cada subida, cada canal se desvía un entero de −10 a +9 sobre 255 y se acumula. Un paso de la Mega Drive son ~36 sobre 255 (3 bits por canal), así que el color se guarda en 8 bits por canal y sólo se ve el cambio cuando cruza un paso; con el fondo de color plano, es el color de fondo del VDP; si se quedan los fondos de imagen (Q16), no hay nada que portar o se aplica a algún índice de su paleta, a decidir.
+- **Incluye**: BULLETS + arma, SCORE, BEST, LEVEL, UPGRADE AT, COINS; "ARENA!", "LEVEL n / NEXT UPGRADE: SCORE x" (155 f), "!!!" (25 f; 26 contando bien, ver §2.8) y la versión definitiva del aviso de congelación del bloque 2. **Fondo que cambia con el nivel** (§2.3, `setCameraLevelColor`): en cada subida, cada canal se desvía un entero de −10 a +9 sobre 255 y se acumula. Un paso de la Mega Drive son ~36 sobre 255 (3 bits por canal), así que el color se guarda en 8 bits por canal y sólo se ve el cambio cuando cruza un paso; con el fondo de color plano, es el color de fondo del VDP; si se quedan los fondos de imagen (Q16), no hay nada que portar o se aplica a algún índice de su paleta, a decidir.
 - **Archivos**: `inc/hud.h`, `src/hud.c`, `tools/gm2md.py` (glifos, si se amplía la fuente grande), `res/gm_art.h`; `src/bg.c` e `inc/bg.h` para el color.
 - **Verificación**: capturas en varios niveles; leer el color de fondo por RAM antes y después de subir de nivel; que el HUD no se redibuje entero cada frame (tráfico al VDP).
 
 ### Bloque 10. Logros
 
-- **Bloqueado por**: Q18.
-- **Incluye**: la lista que decida el usuario, comprobada en los mismos puntos donde ya pasa lo que miden (bajas, nivel, compra, power-ups), pantalla de lista desde el menú, aviso al conseguir uno, guardado en SRAM.
-- **Archivos**: `inc/achieve.h` y `src/achieve.c` nuevos, `src/game.c`, `src/menu.c`, `src/save.c`.
-- **Verificación**: provocar cada logro con el arnés y comprobar el bit en SRAM tras reiniciar.
+- **Estado**: hecho (2026-11-21), ver `docs/PORT_AUDIT_GML.md`, "Bloque 10". Los 17 logros de Q18 con las monedas que decidió el usuario el 2026-11-21; aviso en la fila 26 (2 s, en cola) y lista desde la tienda (entrada ACHIEVEMENTS). Todo invención.
+- **Bloqueado por**: Q18 (resuelta).
+- **Incluye**: la lista que decida el usuario, comprobada en los mismos puntos donde ya pasa lo que miden (bajas, nivel, compra, power-ups), pantalla de lista desde el menú, aviso al conseguir uno; se conservan en RAM hasta apagar (sin SRAM, decisión del usuario del 2026-11-20).
+- **Archivos**: `inc/achieve.h` y `src/achieve.c` nuevos, `src/game.c`, `src/menu.c`.
+- **Verificación**: provocar cada logro con el arnés y comprobar el bit en RAM.
 
 ### Bloque 11. Tutorial
 
 - **Bloqueado por**: Q19.
 - **Incluye**: lo que decida el usuario, adaptado al pad.
-- **Archivos**: `src/game.c`, `src/menu.c`, `src/save.c` (para no repetirlo).
-- **Verificación**: primera partida con SRAM vacía; captura de cada paso.
+- **Archivos**: `src/game.c`, `src/menu.c`. Sin SRAM (decisión del usuario del 2026-11-20), "la primera vez" quiere decir **desde que se enciende la consola** o desde un RESET (confirmado por el usuario el 2026-11-21, `docs/MONSTERLITE_DECISIONES.md`): el tutorial sale en la primera partida tras cada encendido o RESET.
+- **Verificación**: primera partida tras encender; captura de cada paso.
 
 ### Bloque 12. Efectos y sonido
 
 - **Bloqueado por**: Q17 (hitstop por baja), Q20, Q21.
+- **Hecho el 2026-11-21, antes que el 11 (decisión del usuario), sin música**: Q21 revocada el mismo día, en partida no hay música (MonsterLite sí tiene). Incluye además las líneas a las naves holo en tramos de puntos de 2×2 (con el fondo bajado a 504 tiles), la retirada de la muerte del GML y de nueve PCM del GML sin uso (decisiones del usuario), y el arreglo del pool de sprites, que estaba lleno.
 - **Incluye**: hitstop de 30 ms por baja con bala (Q17), cámara lenta de la muerte, sacudidas de MonsterLite (Q20), estela de la nave (13 f), voces nuevas ("ARENA", "AWESOME", "EXPLOSIONS", "RAYS", "CARALLUDO"…), "ding" del contador con la regla de Q15, música (Q21).
 - **Archivos**: `src/shake.c`, `src/effect.c`, `src/audio.c`, `res/resources.res`, `res/sound/`.
 - **Verificación**: escuchar en BlastEm; tamaño del ROM; `tools/measure.sh`.
@@ -568,7 +575,7 @@ Cada bloque dice qué preguntas de §6 tiene que tener respondidas antes de empe
 
 Numeradas en el orden en que bloquean los bloques de §5: las del bloque 1 primero. Entre corchetes, el número que tenían en la primera versión de este documento.
 
-**Todas respondidas por el usuario el 2026-11-15.** Las respuestas están en `docs/MONSTERLITE_DECISIONES.md`, que manda sobre este apartado, y se han copiado al principio de cada pregunta.
+**Todas respondidas por el usuario el 2026-11-15**, salvo las del bloque 9 (2026-11-20): Q22 resuelta ese día y Q23 pendiente. Las respuestas están en `docs/MONSTERLITE_DECISIONES.md`, que manda sobre este apartado, y se han copiado al principio de cada pregunta.
 
 ### Bloque 1
 
@@ -623,9 +630,15 @@ Y aparte: "LAST SCORE" se calcula con un contador que nunca sube (siempre 0) y n
 
 **Q17. Hitstop.** [Q14] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **sí**: 1-2 frames por baja con bala y 5 frames con la bomba y los rayos. Lo que sigue es el planteamiento original de la pregunta. El original congela 30 ms en cada baja **por bala**, fina o gorda (`S/bulletScript.cs:62, 80`, `S/bulletThinSrc.cs:45, 65`; no con LASER, MOIRE, CIRCULAR ni las muertes por bomba o rayos), y 100 ms al tocar la bomba **y al tocar los rayos** (`Thread.Sleep`, `S/playerMovement.cs:200, 213`). ¿Lo porto como 1-2 frames y 5 frames de pausa? Lo de la bomba y los rayos va en el bloque 7; lo de cada baja, en el 12.
 
+### Bloque 9
+
+**Q22. Posición de "!!!".** (Nueva, del bloque 9.) **Resuelta (2026-11-20, `docs/MONSTERLITE_DECISIONES.md`): centrado y un poco más arriba, para que no lo tape la nave al nacer; va en la fila 12 (96-103 px).** Lo que sigue es el planteamiento original de la pregunta. MonsterLite dibuja " !!!" con `readySt`, que está centrado (`MiddleCenter`), en un rectángulo que empieza en (W/2, H − H/1.9) y mide la pantalla entera (`S/HUD.cs:505`). El texto queda centrado en (W, 0,97·H): en la esquina de abajo a la derecha, casi todo fuera de la pantalla (en 1024×768 se ve medio signo de admiración; en NTSC, nada). El port lo pone donde parece apuntar el código, centrado en x y a la altura y = H − H/1.9 = 114 px (fila 14), justo encima de donde aparece la nave. ¿Se queda así, se copia tal cual (en la esquina, casi invisible) o se pone en otro sitio?
+
+**Q23. Balas y puntuación en la misma línea.** (Nueva, del bloque 9; sin responder.) Con SCORE en grande, como pidió el usuario, la línea de arriba tiene 20 glifos de 16 px: BULLETS y SCORE ocupan 12 y quedan 8 para las dos cifras y un hueco. Si no caben (balas de 2 cifras con 6 de puntuación, de 3 con 5, de 4 con 4), ahora manda la puntuación y las balas salen recortadas a 9 ("BULLETS9 123456SCORE" con 35 balas). Otras opciones: las cifras de las balas con la fuente pequeña cuando no caben; quitar el hueco y que las dos cifras se toquen; o subir la palabra SCORE a otra fila sólo entonces. ¿Cuál?
+
 ### Bloque 10
 
-**Q18. Logros.** [Q11] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **todos los grupos propuestos** (progreso, tienda, power-ups) y **cada logro se recompensa con monedas**. Las cantidades son invención: el desarrollador las propone y se consultan al usuario antes de cerrarlas. Lo que sigue es el planteamiento original de la pregunta. MonsterLite no define ninguno. Propuesta, para que decidas (todo inventado, marcado así en la auditoría):
+**Q18. Logros.** [Q11] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **todos los grupos propuestos** (progreso, tienda, power-ups) y **cada logro se recompensa con monedas**. **Cantidades cerradas por el usuario el 2026-11-21:** primera partida 50; niveles 5, 10 y 15: 100, 500 y 2000; puntuación 100, 1000 y 10 000: 100, 300 y 1000; comprar LASER, TWAY, CIRCULAR y MOIRE: 600, 1200, 2400 y 4800; recoger 1000 y 10 000 monedas en total (sólo las cogidas en partida, acumuladas entre partidas): 100 y 1000; usar una bomba, unos rayos y activar una nave holo: 100 cada uno; 10 bajas con una sola bomba: 500. Son 17 (la propuesta de abajo tiene 17; la decisión decía 18 por error). Todo en RAM, sin SRAM. Implementado en el bloque 10. Lo que sigue es el planteamiento original de la pregunta. MonsterLite no define ninguno. Propuesta, para que decidas (todo inventado, marcado así en la auditoría):
 - primera partida; llegar a los niveles 5, 10 y 15;
 - 100, 1000 y 10 000 de puntuación;
 - comprar cada arma (4);
@@ -637,13 +650,13 @@ Y aparte: "LAST SCORE" se calcula con un contador que nunca sube (siempre 0) y n
 
 ### Bloque 11
 
-**Q19. Tutorial.** [Q12] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **sólo una pantalla de instrucciones** la primera vez, sin la línea "AVOID THE HOLES". Lo que sigue es el planteamiento original de la pregunta. Está desactivado en la versión final de MonsterLite. Lo que queda es una práctica con 4 arañas y 1 gusano que se repite si te tocan, más los textos "DODGE BUGS", "AVOID BUGS!" y la tarjeta final "AVOID THE HOLES / … THE SHIP SHOOTS AUTOMATICALLY THE CLOSEST TARGET / COLLECT AMMO / COLLECT COINS". Dos dudas: ¿se porta esa práctica o basta una pantalla de instrucciones la primera vez? Y la tarjeta dice "AVOID THE HOLES", pero en la versión final los agujeros no matan: ¿se quita esa línea, o los agujeros deben matar?
+**Q19. Tutorial.** [Q12] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **sólo una pantalla de instrucciones** la primera vez, sin la línea "AVOID THE HOLES". Sin SRAM, "la primera vez" es la primera partida desde que se enciende la consola o desde un RESET (usuario, 2026-11-21). Lo que sigue es el planteamiento original de la pregunta. Está desactivado en la versión final de MonsterLite. Lo que queda es una práctica con 4 arañas y 1 gusano que se repite si te tocan, más los textos "DODGE BUGS", "AVOID BUGS!" y la tarjeta final "AVOID THE HOLES / … THE SHIP SHOOTS AUTOMATICALLY THE CLOSEST TARGET / COLLECT AMMO / COLLECT COINS". Dos dudas: ¿se porta esa práctica o basta una pantalla de instrucciones la primera vez? Y la tarjeta dice "AVOID THE HOLES", pero en la versión final los agujeros no matan: ¿se quita esa línea, o los agujeros deben matar?
 
 ### Bloque 12
 
 **Q20. Sacudida grande.** [Q15] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **sólo desplazamiento, al tamaño original** (±80/±60 px), sin zoom. Lo que sigue es el planteamiento original de la pregunta. El original hace zoom (tamaño de cámara aleatorio de 0 a 5) y desplaza hasta ±80/±60 px. El VDP no tiene zoom. ¿Sólo el desplazamiento, a ese tamaño o reducido?
 
-**Q21. Música.** [Q17] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **se convierten las 5 pistas `.xm`** de MonsterLite. Lo que sigue es el planteamiento original de la pregunta. MonsterLite tiene 5 pistas `.xm` que cambian en cada partida. ¿Se convierten (coste de ROM y de trabajo) o se queda la música actual?
+**Q21. Música.** [Q17] **Resuelta (2026-11-15, `docs/MONSTERLITE_DECISIONES.md`):** **se convierten las 5 pistas `.xm`** de MonsterLite. **Revocada por el usuario el 2026-11-21:** no se convierten las pistas, ni ahora ni después; en partida no hay música y en el menú y el game over sigue `musMenu` del GML (`docs/MONSTERLITE_DECISIONES.md`). El estudio del bloque 12 queda descartado. Lo que sigue es el planteamiento original de la pregunta. MonsterLite tiene 5 pistas `.xm` que cambian en cada partida. ¿Se convierten (coste de ROM y de trabajo) o se queda la música actual?
 
 ---
 

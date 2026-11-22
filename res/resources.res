@@ -37,13 +37,21 @@ SPRITE beamSprite   "sprite/beam.png"   2 2 FAST
 SPRITE digitSprite  "sprite/digits.png" 1 1 FAST
 # oPlayer/Draw_0: los puntos de la linea azul a las replicas
 SPRITE dotSprite    "sprite/dot.png"    1 1 FAST
+# La estela de la nave (TrailRenderer de P/player.prefab), bloque 12:
+# python3 tools/ml_trail.py. Fila 0, punto de 2x2; fila 1, de 1x1
+SPRITE trailSprite  "sprite/trail.png"  1 1 FAST
+# Las líneas a las naves holo (decisión del usuario del 2026-11-21): tramos de
+# puntos de 2x2 a ~3 px en 7 direcciones, ya en el orden del VDP:
+# python3 tools/ml_lineseg.py. Ver src/beam.c (LINESEG_*)
+TILESET lineSegTiles "sprite/lineseg.png" NONE NONE ROW
 # La moneda, desde el arte de MonsterLite (Q11): python3 tools/ml_coin.py
 SPRITE coinSprite   "sprite/coin.png"   2 2 FAST
 
 # Fondos del campo. NO salen del original (el campo es un color plano): son
 # imagenes que pidio el autor (originales en res/bg_src). tools/bg2md.py las
 # reduce a un diccionario de tiles que cabe en la VRAM. Ver inc/bg.h.
-#   python3 tools/bg2md.py res/bg_src/ruins_md.png --tiles 528 --name ruins --native --soft --focus 8
+#   python3 tools/bg2md.py res/bg_src/ruins_md.png --tiles 504 --name ruins --native --soft --focus 8
+#     (504 desde el bloque 12: 24 tiles para las líneas a las naves holo)
 #     (ruins_md.png es arte de Mega Drive a 1:1, 320x224; el fondo anterior
 #      salia de ruins.png con --crop43 --pixel 5.904x5.728)
 TILESET bgRuinsTiles       "sprite/bg_ruins.png" NONE NONE ROW
@@ -70,21 +78,14 @@ TILESET barTile     "sprite/bar.png" NONE NONE ROW
 
 # ---------------------------------------------------------------------------
 # Sonido. Los originales son Ogg Vorbis; tools/gm2md_audio.py los baja a PCM
-# de 8 bits mono a 13300 Hz, que es lo que reproduce el driver XGM2.
+# de 8 bits mono a 13300 Hz, que es lo que reproduce el driver XGM2. Desde el
+# bloque 12 sólo quedan los del GML que no tienen equivalente en MonsterLite
+# (decisión del usuario del 2026-11-21: fuera los que nadie llama).
 # ---------------------------------------------------------------------------
 WAV sfxShot       "sound/sfxShot.wav"       XGM2
-WAV sfxWBlock     "sound/sfxWBlock.wav"     XGM2
 WAV sfxLaser      "sound/sfxLaser.wav"      XGM2
-WAV sfxThreeWay   "sound/sfxThreeWay.wav"   XGM2
-WAV sfxCircular   "sound/sfxCircular.wav"   XGM2
-WAV sfxBomba      "sound/sfxBomba.wav"      XGM2
-WAV sfxRayos      "sound/sfxRayos.wav"      XGM2
 WAV sfxBoom       "sound/sfxBoom.wav"       XGM2
-WAV sfxPowUp      "sound/sfxPowUp.wav"      XGM2
-WAV sfxRepetea    "sound/sfxRepetea.wav"    XGM2
-WAV sfxRisa       "sound/sfxRisa.wav"       XGM2
 WAV sfxAranaMorte "sound/sfxAranaMorte.wav" XGM2
-WAV sfxMorte      "sound/sfxMorte.wav"      XGM2
 WAV sfxDust       "sound/sfxDust.wav"       XGM2
 WAV musMenu       "sound/musMenu.wav"       XGM2
 # triggerSpeech(): una voz por arma al cambiarla en el menu
@@ -93,3 +94,29 @@ WAV spk1          "sound/spk1.wav"          XGM2
 WAV spk2          "sound/spk2.wav"          XGM2
 WAV spk3          "sound/spk3.wav"          XGM2
 WAV spk4          "sound/spk4.wav"          XGM2
+
+# ---------------------------------------------------------------------------
+# Bloque 12: los sonidos de MonsterLite, con el clip que les pone la escena
+# (biblioteca de SoundManager en Assets/Scenes/MonsterLite.unity). Desde los
+# WAV y el AIFF de Assets/Sound con:  python3 tools/ml2md_audio.py
+# El boomSpeechSnd (Boom.wav) es el sfxBoom de arriba y no se repite.
+# ---------------------------------------------------------------------------
+WAV mlShot        "sound/mlShot.wav"        XGM2
+WAV mlWBlock      "sound/mlWBlock.wav"      XGM2
+WAV mlLaser       "sound/mlLaser.wav"       XGM2
+WAV mlTway        "sound/mlTway.wav"        XGM2
+WAV mlCircular    "sound/mlCircular.wav"    XGM2
+WAV mlXpl         "sound/mlXpl.wav"         XGM2
+WAV mlBombaAm     "sound/mlBombaAm.wav"     XGM2
+WAV mlPowUp       "sound/mlPowUp.wav"       XGM2
+WAV mlRepetea     "sound/mlRepetea.wav"     XGM2
+WAV mlArena       "sound/mlArena.wav"       XGM2
+WAV mlXplosions   "sound/mlXplosions.wav"   XGM2
+WAV mlRays        "sound/mlRays.wav"        XGM2
+WAV mlAwesome     "sound/mlAwesome.wav"     XGM2
+# caralludoSpeechSnd es Fafarre.aiff, que playCaralludoClip toca a tono 2
+WAV mlCaralludo   "sound/mlCaralludo.wav"   XGM2
+# dingSnd, que playDing toca a tono 3
+WAV mlDing        "sound/mlDing.wav"        XGM2
+WAV mlBtnShort    "sound/mlBtnShort.wav"    XGM2
+WAV mlBtnLong     "sound/mlBtnLong.wav"     XGM2

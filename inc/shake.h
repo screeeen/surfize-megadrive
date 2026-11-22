@@ -5,10 +5,27 @@
 #include "arena.h"
 
 // ===========================================================================
-// Sacudida de pantalla (stShake)
+// Sacudida de pantalla
 //
-// El original mueve la cámara. scripts/stShake/stShake.gml sólo guarda los
-// parámetros en oPlayer, y oPlayer/Step_0 los consume al final de cada frame:
+// Dos modelos, uno de cada fuente:
+//
+// 1. MonsterLite (bloque 12), S/cameraScript.cs. Dos corrutinas que en cada
+//    frame de Update ponen la cámara en un punto al azar y, al acabar, la
+//    devuelven a (0, 0):
+//
+//      shake(t)       (15-45): Random.Range(-4, 4) u en X y (-3, 3) u en Y,
+//                     o sea +-80 / +-60 px, durante t frames. Además cambia
+//                     el tamaño de la cámara a un entero de 0 a 5 (zoom):
+//                     el VDP no escala, y Q20 decide sólo el desplazamiento,
+//                     al tamaño original.
+//      shakeSmall(t)  (47-76): Random.Range(-0,2, 0,2) u = +-4 px en los dos
+//                     ejes, durante t frames.
+//
+//    El bucle es "while (t > 0) { ...; t -= 1; yield }": t = 0,5 y 0,3 dan
+//    una vuelta, 4 dan cuatro. Son frames de Update (60 Hz): ÷1.2.
+//
+// 2. El GML (scripts/stShake), para lo que sólo existe en el GML: la metralla
+//    de oEstallido y el disparo del PIVOT y del PARA. oPlayer/Step_0:
 //
 //     if (shake) {
 //        shake_time -= 1;
@@ -24,35 +41,65 @@
 //        }
 //     }
 //
-// Dos detalles que hay que portar tal cual: el salto es siempre a +-magnitud
-// exacta (nunca a un valor intermedio, nunca a cero), y la magnitud no empieza
-// a bajar hasta que se agota shake_time, así que la duración real de una
-// sacudida es time + magnitud/fade frames, no time.
+//    El salto es siempre a +-magnitud exacta y la magnitud no empieza a bajar
+//    hasta que se agota shake_time.
 //
-// La sacudida vive en oPlayer, así que sólo existe mientras el jugador existe:
-// durante el menú o la muerte el original no la actualiza. Las siete llamadas
-// del original están en las macros de abajo.
+// Si coinciden, manda la grande de MonsterLite, luego la pequeña y luego la
+// del GML. Varias corrutinas de MonsterLite a la vez se quedan con el tiempo
+// mayor (en Unity corren en paralelo y el punto lo pone la última de cada
+// frame; aquí la de más alcance).
 //
-// En Mega Drive no hay cámara: mover la vista es desplazar el plano A (que en
-// partida lleva los agujeros, los paquetes y el HUD) con los registros de
-// scroll, y restar el mismo desplazamiento a cada sprite. El desplazamiento se
-// aplica dentro de sprPos (ver inc/spr.h), así que no hay que tocar
-// ninguna llamada: son dos restas por sprite y frame.
+// En Mega Drive no hay cámara: mover la vista es desplazar los planos con los
+// registros de scroll, y restar el mismo desplazamiento a cada sprite. El
+// desplazamiento se aplica dentro de sprPos (ver inc/spr.h), así que no hay
+// que tocar ninguna llamada: son dos restas por sprite y frame.
 //
 // Desviaciones (ver docs/PORT_AUDIT_GML.md):
 //   - el desplazamiento se calcula al principio del frame y no al final, para
 //     que el plano y los sprites usen el mismo valor dentro del mismo frame.
-//   - al morir el jugador el original deja la cámara donde estuviera; aquí se
-//     recentra, que si no la pantalla se queda torcida al entrar en el menú.
-//   - desplazar el plano A lo envuelve por el otro lado en vez de descubrir el
-//     exterior del room. En partida el plano está vacío salvo agujeros,
-//     paquetes y HUD, así que por el borde asoma el color de fondo, igual que
-//     en el original.
+//   - la sacudida sólo corre mientras corre la partida (no con el tiempo
+//     parado ni en el hitstop): mover el plano con los sprites quietos los
+//     descuadraría. Las de MonsterLite duran 1-8 frames.
+//   - el HUD y el texto van en el plano A y se sacuden con él; en MonsterLite
+//     son OnGUI y no se mueven.
+//   - desplazar los planos los envuelve por el otro lado en vez de descubrir
+//     el exterior. El fondo (plano B) rellena las columnas que sobran con el
+//     otro lado del campo (src/bg.c, drawRow): en horizontal envuelve exacto
+//     hasta ±96 px; en vertical sólo sobran 2 filas y por encima del campo
+//     asoman 16 px desplazados. El plano A (agujeros, HUD) no tiene nada en
+//     las columnas de sobra: por ahí se ve el fondo.
 // ===========================================================================
 
 // Posición de la cámara en píxeles de pantalla (camera_set_view_pos).
 extern s16 g_shakeX;
 extern s16 g_shakeY;
+
+// --- MonsterLite -----------------------------------------------------------
+
+// shake(t): +-80 / +-60 px durante 'frames' frames.
+void Shake_big(u16 frames);
+// shakeSmall(t): +-4 px durante 'frames' frames.
+void Shake_small(u16 frames);
+
+// Los +-4 u / +-3 u de shake y los +-0,2 u de shakeSmall, a 20 px por unidad.
+#define ML_SHAKE_BIG_X      80
+#define ML_SHAKE_BIG_Y      60
+#define ML_SHAKE_SMALL      4
+
+// Las llamadas, con su t de frames de Update pasado a frames (÷1.2, con el
+// mismo redondeo que GML_FRAMES) y su línea.
+#define ML_SHAKE_START_F    GML_FRAMES(4)   // shake(4):  menú -> partida, S/gameControl.cs:219
+#define ML_SHAKE_DEATH_F    GML_FRAMES(4)   // shake(4):  al acabar la cámara lenta, S/gameControl.cs:714
+#define ML_SHAKE_BOMB_F     GML_FRAMES(1)   // shake(1):  bomba, S/playerMovement.cs:206
+#define ML_SHAKE_RAYS_F     GML_FRAMES(10)  // shakeSmall(10): rayos, S/playerMovement.cs:217
+#define ML_SHAKE_WBLOCK_F   GML_FRAMES(1)   // shakeSmall(1):   S/disparo.cs:61
+#define ML_SHAKE_LASER_F    GML_FRAMES(1)   // shakeSmall(0.5): S/disparo.cs:83 (una vuelta)
+#define ML_SHAKE_MOIRE_F    GML_FRAMES(1)   // shakeSmall(1):   S/disparo.cs:104
+#define ML_SHAKE_TWAY_F     GML_FRAMES(1)   // shakeSmall(0.3): S/disparo.cs:122 (una vuelta)
+#define ML_SHAKE_CIRC_F     GML_FRAMES(3)   // shakeSmall(3) por frame de bola que persigue,
+                                            // S/circularScr.cs:59
+
+// --- GML (stShake) ---------------------------------------------------------
 
 // La magnitud es una distancia del room (x0.2) y el desvanecimiento se resta
 // una vez por frame (x0.2 de escala y x1.2 de refresco, o sea x0.24).
@@ -62,38 +109,22 @@ extern s16 g_shakeY;
 // stShake(_time, _magnitude, _fade)
 void Shake_start(u16 time, fix16 magnitude, fix16 fade);
 
-// Una vez por frame, mientras el jugador exista.
-void Shake_update(void);
-
-// Recentra la vista y corta la sacudida en curso.
-void Shake_stop(void);
-
-// ---------------------------------------------------------------------------
-// Las llamadas del original, cada una con su línea de GML
-// ---------------------------------------------------------------------------
-
-// oPlayer/Step_0: cada disparo con arma
+// oPlayer/Step_0: cada disparo con arma. Desde el bloque 12, sólo el PIVOT y
+// el PARA, que no están en MonsterLite.
 #define Shake_shot()        Shake_start(GML_FRAMES(4),  SHAKE_MAG(5),   SHAKE_FADE(0.2))
-
-// oPlayer/Step_0: cada disparo de la bala por defecto. La magnitud es 1 del
-// room, que a x0.2 son 0,2 px: por debajo del píxel, así que no se ve. Se
-// porta igual para no inventar una constante que el original no tiene.
-#define Shake_thinShot()    Shake_start(GML_FRAMES(1),  SHAKE_MAG(1),   SHAKE_FADE(0.1))
 
 // oEstallido/Create_0: la metralla
 #define Shake_estallido()   Shake_start(GML_FRAMES(5),  SHAKE_MAG(15),  SHAKE_FADE(1.0))
 
-// oTri/Step_0: disparo de la nave réplica con munición
-#define Shake_tri()         Shake_start(GML_FRAMES(5),  SHAKE_MAG(5),   SHAKE_FADE(0.2))
+// --- Las dos ---------------------------------------------------------------
 
-// oRay/Create_0: 50 frames a magnitud 20 y fade 4
-#define Shake_ray()         Shake_start(GML_FRAMES(50), SHAKE_MAG(20),  SHAKE_FADE(4.0))
+// Una vez por frame, mientras corra la partida.
+void Shake_update(void);
 
-// oExplosionCruz/Create_0: la más violenta del juego, 30 px durante 4 s
-#define Shake_cruz()        Shake_start(GML_FRAMES(10), SHAKE_MAG(150), SHAKE_FADE(0.6))
+// ¿Hay alguna sacudida en marcha?
+bool Shake_active(void);
 
-// oSplashS/Step_0 llama a stShake(2,2,0.2) justo antes de destruirse, pero
-// stShake hace "with (oPlayer)" y durante el splash no hay jugador: en el
-// original esa llamada no hace nada. No se porta.
+// Recentra la vista y corta todas las sacudidas en curso.
+void Shake_stop(void);
 
 #endif

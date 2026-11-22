@@ -25,7 +25,7 @@ Decisión del usuario (2026-11-15): **MonsterLite (Unity, C#) es la fuente de ve
    - Sirve para lo que MonsterLite no define y para el arte ya reconvertido. Donde MonsterLite y el GML discrepen, **manda MonsterLite**.
 - Destino: este repo (`/Users/miguelangelalvarez/arena-megadrive`), SGDK en `$GDK`, build `make` → `out/rom.bin`, prueba `blastem out/rom.bin`.
 
-**Adaptaciones decididas por el usuario:** monedas y tienda dentro del juego (sin dinero real), tutorial, logros como lista dentro del juego y progreso en SRAM (récord, armas desbloqueadas, monedas, logros). **Se descartan:** publicidad, compras reales, Game Center, Play Games, leaderboards online y multijugador.
+**Adaptaciones decididas por el usuario:** monedas y tienda dentro del juego (sin dinero real), tutorial, logros como lista dentro del juego y progreso **sólo en RAM** (récord, armas desbloqueadas, monedas, logros): se pierde al apagar, el juego no usa SRAM (decisión del usuario del 2026-11-20, que sustituye al progreso en SRAM). **Se descartan:** publicidad, compras reales, Game Center, Play Games, leaderboards online y multijugador.
 
 Lee el código de MonsterLite (o el GML, si MonsterLite no lo define) antes de afirmar cómo funciona algo. No inventes código que no exista. Si un valor no está en ninguna de las dos fuentes, dilo explícitamente en lugar de inventarlo.
 
@@ -74,7 +74,7 @@ Bloques de `docs/MONSTERLITE_GAP.md` §5, en orden, cada uno validado antes de p
 3. Armas y munición — WBLOCK, LASER, TWAY, CIRCULAR, MOIRE; balas que mueren al salir de pantalla; impacto instantáneo; munición por arma.
 4. Economía en partida — drops 50/50, paquetes que caducan, monedas.
 5. Pantallas — menú, game over con sus contadores, tienda GEAR.
-6. Guardado en SRAM.
+6. Guardado en SRAM. **Retirado** (decisión del usuario del 2026-11-20): sin SRAM, el progreso vive en RAM hasta apagar.
 7. Power-ups — bomba, rayos, naves holo.
 8. Enemigos — IA ATTACK/WANDER, velocidades por nivel, gusano, agujeros.
 9. HUD, mensajes de partida y fondo por nivel.

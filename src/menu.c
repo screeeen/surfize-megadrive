@@ -7,7 +7,7 @@
 #include "audio.h"
 #include "hud.h"
 #include "weapon.h"
-#include "save.h"
+#include "achieve.h"
 
 #define COLS            (PLAYFIELD_W / 8)
 #define ROW_CREDITS     (GML_POS(1200 * 70 / 100) / 8)      // fila 21
@@ -36,16 +36,26 @@
 #define ST_ROW_SHELF    17          // los iconos (4 filas) y el cursor debajo
 #define ST_ROW_SELECT   22
 #define ST_ROW_NEXT     23
+#define ST_ROW_ACH      24          // bloque 10: la entrada a la lista de logros
 #define ST_ROW_AUDIO    25
 #define ST_ROW_PLAY     26
 #define ST_COL_SOUND    2
 #define ST_COL_MUSIC    16
 
+// La lista de logros (bloque 10, invención) va en la misma banda que la
+// tienda: el título, los tres grupos con su cabecera y BACK.
+#define ACH_ROW_TITLE   4
+#define ACH_ROW_FIRST   6           // cabecera de PROGRESS; luego, seguido
+#define ACH_ROW_BACK    26
+#define ACH_COL_MARK    2           // "[*]" / "[ ]"
+#define ACH_COL_NAME    6
+#define ACH_COL_COINS   28          // "nnnn COINS" alineado a la derecha, hasta la 37
+#define ACH_COINS_W     10
+
 // "TAP TO START" (S/menu.cs) parpadea con "t % 100 < 50", t contado por
 // llamada a OnGUI: dos por frame de 60 Hz, o sea 25 frames de Update
 // encendido y 25 apagado -> 21 f a 50 Hz.
 #define SPLASH_BLINK_F  21
-#define HUD_ROW_BOTTOM  2                                   // BULLETS/KILLS (2 filas) y LAST
 
 // Tiles: los agujeros ocupan 64 y el suelo 16 desde TILE_USER_INDEX.
 #define WEAPON_TILES     4                                  // 4x4 por icono
@@ -103,29 +113,33 @@ static s16  flashCol[16][3];    // el color de ahora, canal a canal, en 1/16 de 
 
 // La tienda.
 static bool inStore;
-static u8   stItem;         // 0-3 las armas de pago, 4 estante, 5 sonido, 6 música, 7 PLAY
+static u8   stItem;         // 0-3 las armas de pago, 4 estante, 5 logros, 6 sonido, 7 música, 8 PLAY
 static bool stDirty;
+
+// La lista de logros, abierta desde la tienda.
+static bool inAch;
+static bool achDirty;
 
 static s16  bandTop = -1;   // filas del plano B que ha pisado la banda
 static s16  bandBottom = -1;
 
 static void clearArea(void)
 {
-    u16 r;
-
-    // oInGameHUD sólo se dibuja "if !instance_exists(oMenu)", así que al
-    // entrar en el menú se limpia la franja del HUD. El resto del plano A
-    // ya está limpio de texto (lo deja así Menu_leave) y tiene los agujeros,
-    // que en el original siguen viéndose detrás del menú: no se tocan.
-    for (r = 0; r <= HUD_ROW_BOTTOM; r++) VDP_clearTextLine(r);
+    // oInGameHUD sólo se dibuja "if !instance_exists(oMenu)" (y el HUD de
+    // MonsterLite sale de la pantalla fuera de partida), así que al entrar en
+    // el menú se quita el HUD con sus mensajes (HUD_clear deja los agujeros
+    // que pasan por sus filas). El resto del plano A ya está limpio de texto
+    // (lo deja así Menu_leave) y tiene los agujeros, que en el original siguen
+    // viéndose detrás del menú: no se tocan.
+    HUD_clear();
     VDP_clearTextLine(ROW_MARQUEE);
 }
 
 // Escribe 'text' en la fila 'row' del plano A sobre lo que haya de agujeros:
 // las celdas sin letra se quedan con el agujero, no con un hueco, y las
 // letras que caen encima de un agujero se componen con él (ver
-// Hole_textRow), por si la fila cruza el dibujo de algún agujero. Una sola escritura de fila, así que no hay frame en que
-// la fila salga a medias.
+// Hole_drawTextRow), por si la fila cruza el dibujo de algún agujero. Una
+// sola escritura de fila, así que no hay frame en que la fila salga a medias.
 static void drawRowOverHoles(const char *text, u16 col, u16 row)
 {
     Hole_drawTextRow(text, col, row);
@@ -214,10 +228,16 @@ void Menu_enter(void)
     barHeight = 0;
     inMenu = TRUE;
     inStore = FALSE;
+    inAch = FALSE;
     staticDrawn = FALSE;
 
     // menu(): audio_play_sound(menuSong, 1, false)
     Audio_menuMusic(TRUE);
+    // NEW RECORD!: gameOverSrc.OnGUI llama a playAwesomeWoman en cada pasada
+    // mientras lo dibuja (S/gameOverSrc.cs:257-264), o sea varias veces por
+    // frame, superpuestas, todo el game over. Con 3 canales eso es un canal
+    // reiniciando la voz cada frame (no se oiría): suena una vez, al entrar.
+    if (g_score > g_bestAtStart) Audio_sfx(SFX_ML_AWESOME);
     shownWeapon = 0xFFFF;
     shownBar = -1;
 
@@ -274,6 +294,7 @@ void Menu_leave(void)
     Audio_menuMusic(FALSE);
     inMenu = FALSE;
     inStore = FALSE;
+    inAch = FALSE;
     staticDrawn = FALSE;
 
     // Si el fogonazo rojo no había acabado, el fondo vuelve a su paleta.
@@ -300,6 +321,9 @@ void Menu_leave(void)
         Hole_rowTiles(r, row, planeWidth);
         VDP_setTileMapDataRow(BG_A, row, r, 0, planeWidth, CPU);
     }
+    // Las filas con texto encima de los agujeros (PRESS START) ya no lo
+    // tienen: se olvidan y sus tiles vuelven a la reserva.
+    Hole_forgetText();
 
     Bg_setCover(-1, -1);
     if (bandTop >= 0) Bg_drawRows(bandTop, bandBottom);
@@ -558,9 +582,12 @@ static void drawLogo(void)
 // 200/417. Igual.
 //
 // El "ding" sonaba una vez por corrutina, hasta ~200 superpuestos; Q15: uno
-// por frame en que sube SCORE (el tick del PSG, Audio_tick). Lo de no contar
-// mientras la cámara se sacude (!globales.shaking) no se porta: en el game
-// over del port no hay sacudida.
+// por frame en que sube SCORE (dingSnd a tono 3, bloque 12; antes era un
+// golpe de ruido del PSG). CARALLUDO (Fafarre.aiff a tono 2) suena una vez,
+// cuando counterK pasa por kills - 1 (S/gameOverSrc.cs:129): con 0 o 1 punto
+// no llega a sonar. Lo de no contar mientras la cámara se sacude
+// (!globales.shaking): la sacudida de la muerte va antes de abrir el game
+// over (Game_killPlayer), así que la cuenta ya empieza al acabar.
 // ---------------------------------------------------------------------------
 static bool showStep(void)
 {
@@ -660,11 +687,11 @@ static char *fmtU32(char *dst, u32 v)
     return dst;
 }
 
-// Etiqueta seguida de un número.
-static void labelNum(char *dst, const char *label, u32 v)
+// Etiqueta seguida de un número. Devuelve el final de la cadena.
+static char *labelNum(char *dst, const char *label, u32 v)
 {
     while (*label) *dst++ = *label++;
-    fmtU32(dst, v);
+    return fmtU32(dst, v);
 }
 
 // Escribe una línea de texto en la fila 'row' del plano A, en prioridad
@@ -739,11 +766,12 @@ static void drawGameOver(void)
 // Se descartan el botón del leaderboard y el GEAR, que no hace nada. Los
 // iconos de bomba y rayos de la tienda son decorativos y no se portan.
 // ---------------------------------------------------------------------------
-#define ST_ITEMS        8
+#define ST_ITEMS        9
 #define ST_ITEM_SHELF   4
-#define ST_ITEM_SOUND   5
-#define ST_ITEM_MUSIC   6
-#define ST_ITEM_PLAY    7
+#define ST_ITEM_ACH     5           // bloque 10
+#define ST_ITEM_SOUND   6
+#define ST_ITEM_MUSIC   7
+#define ST_ITEM_PLAY    8
 
 // W/GameAssets.cs:133-155: nombre, descripción y precio (Q14), en el orden
 // de la tienda.
@@ -763,8 +791,12 @@ static void storeOpen(void)
     s16 r;
 
     inStore = TRUE;
+    inAch = FALSE;
     stItem = 0;
     stDirty = TRUE;
+
+    // El HUD, ya fuera: el plano se borra aquí abajo.
+    HUD_hideNow();
 
     // Fuera el game over (sus filas vuelven a tener sólo agujeros, que la
     // banda tapa) y la banda grande.
@@ -812,12 +844,108 @@ static void drawStore(void)
     else sprintf(buf, "NEXT GEAR AT %lu KILLS", g_nextWeapon + 1);
     drawLine(buf, 2, ST_ROW_NEXT, COLS - 4);
 
+    // Bloque 10: la lista de logros, con cuántos hay conseguidos.
+    {
+        char *e = labelNum(buf, (stItem == ST_ITEM_ACH) ? ">ACHIEVEMENTS " : " ACHIEVEMENTS ",
+                           Achieve_doneCount());
+
+        *e++ = '/';
+        fmtU32(e, ACH_COUNT);
+        drawLine(buf, 1, ST_ROW_ACH, COLS - 2);
+    }
+
     sprintf(buf, "%cSOUND %s", (stItem == ST_ITEM_SOUND) ? '>' : ' ', g_soundOn ? "ON " : "OFF");
     drawLine(buf, ST_COL_SOUND - 1, ST_ROW_AUDIO, 12);
     sprintf(buf, "%cMUSIC %s", (stItem == ST_ITEM_MUSIC) ? '>' : ' ', g_musicOn ? "ON " : "OFF");
     drawLine(buf, ST_COL_MUSIC - 1, ST_ROW_AUDIO, 12);
 
     drawLine((stItem == ST_ITEM_PLAY) ? ">PLAY" : " PLAY", (COLS - 5) / 2, ST_ROW_PLAY, 5);
+}
+
+// ---------------------------------------------------------------------------
+// La lista de logros (bloque 10)
+//
+// Invención: MonsterLite no tiene logros (ver inc/achieve.h). Se abre desde
+// la tienda (ACHIEVEMENTS, entre NEXT GEAR y SOUND) y vuelve a ella. Misma
+// banda, misma fuente y mismo estilo que la tienda: el título centrado, una
+// cabecera por grupo y una línea por logro con "[*]" si está conseguido o
+// "[ ]" si no, su nombre y sus monedas. A, B, C o START vuelven.
+// ---------------------------------------------------------------------------
+
+// Fuera el texto de la banda (la tienda o la lista), dejando los agujeros,
+// que la banda tapa. Los iconos del estante también se van: drawWeapons los
+// vuelve a pintar.
+static void clearBandText(void)
+{
+    s16 r;
+
+    for (r = ST_ROW_TOP; r <= ST_ROW_BOTTOM; r++) Hole_clearTextRow(r);
+    shownWeapon = 0xFFFF;
+}
+
+static void drawAchList(void)
+{
+    static const char *const group[3] = { "PROGRESS", "SHOP", "POWER-UPS" };
+    static const u8 groupFirst[3] = { ACH_FIRST_GAME, ACH_GROUP_SHOP, ACH_GROUP_POWER };
+    char buf[COLS + 1];
+    u16 row = ACH_ROW_FIRST;
+    u16 g, id = 0;
+
+    if (!achDirty) return;
+    achDirty = FALSE;
+
+    {
+        char *e = labelNum(buf, "ACHIEVEMENTS ", Achieve_doneCount());
+
+        *e++ = '/';
+        fmtU32(e, ACH_COUNT);
+        drawLine(buf, (COLS - strlen(buf)) / 2, ACH_ROW_TITLE, strlen(buf));
+    }
+
+    for (g = 0; g < 3; g++)
+    {
+        const u16 last = (g < 2) ? groupFirst[g + 1] : ACH_COUNT;
+
+        drawLine(group[g], 1, row++, COLS - 2);
+
+        for (id = groupFirst[g]; id < last; id++, row++)
+        {
+            char coins[ACH_COINS_W + 1];
+            const char *name = Achieve_name(id);
+            u16 i, n;
+
+            for (i = 0; i < (COLS - 2); i++) buf[i] = ' ';
+            buf[ACH_COL_MARK - 1] = '[';
+            buf[ACH_COL_MARK] = Achieve_done(id) ? '*' : ' ';
+            buf[ACH_COL_MARK + 1] = ']';
+            for (i = 0; name[i]; i++) buf[ACH_COL_NAME - 1 + i] = name[i];
+
+            n = labelNum(coins, "", Achieve_reward(id)) - coins;
+            for (i = 0; i < n; i++) buf[ACH_COL_COINS - 1 + (ACH_COINS_W - 6 - n) + i] = coins[i];
+            for (i = 0; i < 5; i++) buf[ACH_COL_COINS - 1 + ACH_COINS_W - 5 + i] = "COINS"[i];
+            buf[COLS - 2] = 0;
+            drawLine(buf, 1, row, COLS - 2);
+        }
+    }
+
+    drawLine(">BACK", (COLS - 5) / 2, ACH_ROW_BACK, 5);
+}
+
+static void achOpen(void)
+{
+    inAch = TRUE;
+    achDirty = TRUE;
+    clearBandText();
+}
+
+static void achInput(u16 pressed)
+{
+    if (!(pressed & (BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START))) return;
+
+    // De vuelta a la tienda, en la misma entrada.
+    inAch = FALSE;
+    clearBandText();
+    stDirty = TRUE;
 }
 
 // Una pulsación en la tienda. TRUE si hay que empezar la partida.
@@ -835,14 +963,16 @@ static bool storeInput(u16 pressed)
             s16 w = (s16)g_weaponIndex - 1;
 
             while ((w >= 0) && !(g_weaponsAvail & (1 << w))) w--;
-            if (w >= 0) { g_weaponIndex = w; Audio_speech(g_weaponIndex); stDirty = TRUE; }
+            // El estante de MonsterLite suena con playShortButton
+            // (S/StoreMenu.cs:475); la voz del arma es del GML.
+            if (w >= 0) { g_weaponIndex = w; Audio_sfx(SFX_ML_BTN_SHORT); Audio_speech(g_weaponIndex); stDirty = TRUE; }
         }
         if (pressed & BUTTON_RIGHT)
         {
             u16 w = g_weaponIndex + 1;
 
             while ((w < WPN_COUNT) && !(g_weaponsAvail & (1 << w))) w++;
-            if (w < WPN_COUNT) { g_weaponIndex = w; Audio_speech(g_weaponIndex); stDirty = TRUE; }
+            if (w < WPN_COUNT) { g_weaponIndex = w; Audio_sfx(SFX_ML_BTN_SHORT); Audio_speech(g_weaponIndex); stDirty = TRUE; }
         }
     }
 
@@ -856,22 +986,35 @@ static bool storeInput(u16 pressed)
 
         if (!(g_weaponsBought & (1 << w)))
         {
+            // El botón de compra: playShortButton antes de BuyItem
+            // (S/StoreMenu.cs:226), con saldo o sin él.
+            Audio_sfx(SFX_ML_BTN_SHORT);
             // PurchaseWithVirtualItem: sin saldo, no pasa nada.
             if (g_coins < storePrice[stItem]) return FALSE;
             g_coins -= storePrice[stItem];
             g_weaponsBought |= (u16)(1 << w);
             Game_checkWeapons();
-            Audio_sfx(SFX_POWUP);
+            // Bloque 10: comprar el arma (el orden de storeWeapon es el de
+            // los logros). La recompensa entra en el saldo ya.
+            Achieve_unlock(ACH_BUY_LASER + stItem);
         }
-        // Comprada (o recién comprada): se equipa, y se guarda (Soomla guarda
-        // la compra en el acto).
+        // Comprada (o recién comprada): se equipa. Dura hasta apagar (sin
+        // SRAM).
         g_weaponIndex = w;
         Audio_speech(g_weaponIndex);
-        Save_write();
         return FALSE;
     }
 
-    if (stItem == ST_ITEM_SOUND) { g_soundOn = !g_soundOn; return FALSE; }
+    if (stItem == ST_ITEM_ACH) { achOpen(); return FALSE; }
+
+    if (stItem == ST_ITEM_SOUND)
+    {
+        // globales.audioToggle: playShortButton al encenderlo (al apagarlo
+        // ya no se oiría), S/globales.cs:457-462.
+        g_soundOn = !g_soundOn;
+        if (g_soundOn) Audio_sfx(SFX_ML_BTN_SHORT);
+        return FALSE;
+    }
 
     if (stItem == ST_ITEM_MUSIC)
     {
@@ -882,10 +1025,6 @@ static bool storeInput(u16 pressed)
 
     if (stItem != ST_ITEM_PLAY) return FALSE;
 
-    // Al salir de la tienda se guarda el arma elegida y el sonido y la
-    // música. En MonsterLite eso esperaba al game over siguiente (setData);
-    // aquí no se pierde si se apaga a mitad de partida.
-    Save_write();
     return TRUE;
 }
 
@@ -895,6 +1034,15 @@ bool Menu_update(u16 pad, bool firstTime)
 
     prevPad = pad;
     (void)firstTime;
+
+    if (inStore && inAch)
+    {
+        drawAchList();
+        drawMarquee(marquee[(g_weaponIndex < WPN_COUNT) ? g_weaponIndex : 0],
+                    strlen(marquee[(g_weaponIndex < WPN_COUNT) ? g_weaponIndex : 0]));
+        achInput(pressed);
+        return FALSE;
+    }
 
     if (inStore)
     {
@@ -915,6 +1063,7 @@ bool Menu_update(u16 pad, bool firstTime)
         {
             u16 steps = 1;
             bool dinged = FALSE;
+            bool fanfare = FALSE;
 
             if (++updAcc >= 5) { updAcc = 0; steps = 2; }
 
@@ -923,10 +1072,19 @@ bool Menu_update(u16 pad, bool firstTime)
                 const u32 before = counterK;
 
                 showStep();
-                if (counterK != before) dinged = TRUE;
+                if (counterK != before)
+                {
+                    dinged = TRUE;
+                    // counterK sube de uno en uno dentro de cada corrutina:
+                    // pasa por todos los valores intermedios.
+                    if ((g_score >= 2) && (before < (g_score - 1)) &&
+                        (counterK >= (g_score - 1)))
+                        fanfare = TRUE;
+                }
                 if (flashOn) flashStep();
             }
-            if (dinged) Audio_tick();
+            if (dinged) Audio_sfx(SFX_ML_DING);
+            if (fanfare) Audio_sfx(SFX_ML_CARALLUDO);
         }
 
         drawGameOver();
@@ -939,6 +1097,8 @@ bool Menu_update(u16 pad, bool firstTime)
         {
             if (goChoice == 1)
             {
+                // GEAR: playLongButton (S/gameOverSrc.cs:381). PLAY no suena.
+                Audio_sfx(SFX_ML_BTN_LONG);
                 storeOpen();
                 return FALSE;
             }

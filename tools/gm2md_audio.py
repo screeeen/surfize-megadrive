@@ -23,22 +23,15 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "res", "sou
 VLC = "/Applications/VLC.app/Contents/MacOS/VLC"
 RATE = 13300
 
-# Sonidos que usa el port, con el nombre del recurso. Los de voz suenan al
+# Sonidos que usa el port, con el nombre del recurso. Desde el bloque 12
+# (decisión del usuario del 2026-11-21) sólo los que no tienen equivalente en
+# MonsterLite; los demás salen de tools/ml2md_audio.py. Los de voz suenan al
 # cambiar de arma en el menú (triggerSpeech).
 SOUNDS = [
     ("shotSnd",            "sfxShot"),        # oBulletThin
-    ("wBlockSnd",          "sfxWBlock"),      # oWBlock
     ("laserSnd",           "sfxLaser"),       # oLaser y oBomba
-    ("threeWaySnd",        "sfxThreeWay"),    # o3way
-    ("circularSnd",        "sfxCircular"),    # arma circular
-    ("bombaSnd",           "sfxBomba"),       # oPlayer/Collision_oBoomPowUp
-    ("rayosSnd",           "sfxRayos"),       # oPlayer/Collision_oRayosPowUp
     ("boomSnd",            "sfxBoom"),
-    ("powUpSnd",           "sfxPowUp"),       # oPaquete/Collision_oPlayer
-    ("repeteaSnd",         "sfxRepetea"),     # nave réplica y pivote
-    ("risaSnd",            "sfxRisa"),        # Collision_oBoomPowUp
     ("aranamorteSnd",      "sfxAranaMorte"),  # oExplosion y morteGusano
-    ("morteSnd",           "sfxMorte"),       # oMuerte
     ("dustSnd",            "sfxDust"),
     ("menuSong",           "musMenu"),        # menu(): audio_play_sound(menuSong)
     # triggerSpeech(weapon_index): una voz por arma al cambiarla en el menú

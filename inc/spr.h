@@ -34,7 +34,11 @@
 
 // 80 es el tope del VDP; estas son ranuras lógicas, de las que se pintan las
 // 80 primeras que caigan dentro de la pantalla.
-#define MDSPR_POOL      256
+// 316 repartidas desde el bloque 12 (la estela se lleva 13 y las líneas a
+// las holo pasan de 30 puntos a 40). Eran 256 y se pedían 293: los últimos 37 (los puntos de los rayos y parte de los de las
+// líneas a las holo) caían en el sumidero y no se dibujaban. Spr_check para
+// el juego al arrancar si vuelve a pasar.
+#define MDSPR_POOL      320
 
 // OJO AL ORDEN DE LOS CAMPOS: los ocho primeros bytes son, byte a byte, una
 // entrada de la tabla de sprites del VDP (VDPSprite: y, size_link, attribut,
@@ -73,6 +77,26 @@ void Spr_flush(void);
 // ranuras hay repartidas: para el presupuesto.
 u16 Spr_satUsed(void);
 u16 Spr_allocated(void);
+
+// La COLA del pool: un tramo de ranuras, al final de todo, que casi siempre
+// está entero aparcado (los puntos de las líneas a las holo y de los rayos,
+// 40 + 33). Recorrer una ranura aparcada cuesta 44 ciclos (ver la auditoría,
+// "El montador de sprites en ensamblador"), así que el montador se salta la
+// cola más allá de lo que su dueño diga que puede estar a la vista.
+// Spr_tailBegin y Spr_tailEnd rodean su reparto; Spr_tailVisible lo llama el
+// dueño cada vez que cambia, con cuántas ranuras de la cola hay que recorrer
+// desde su principio (0: ninguna; 0xFFFF: todas).
+void Spr_tailBegin(void);
+void Spr_tailEnd(void);
+void Spr_tailVisible(u16 count);
+// Cuántos sprites de la cola hay a la vista (un sprite de hardware cada
+// uno): no cuentan para la rotación por franjas llenas (Spr_flush).
+void Spr_tailEntries(u16 count);
+
+// Para el juego con un mensaje si se han pedido más ranuras de las que hay
+// (las que no caben van al sumidero y no se ven). Se llama al acabar de
+// repartir, como VTile_check.
+void Spr_check(void);
 
 // ---------------------------------------------------------------------------
 // Operaciones del bucle de juego, todas en línea

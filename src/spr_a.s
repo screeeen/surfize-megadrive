@@ -45,7 +45,7 @@
 Spr_build:
     movem.l %d2-%d7/%a2-%a3,-(%sp)
 
-    move.w  sprPoolCount,%d1
+    move.w  sprWalkCount,%d1    /* sprPoolCount, o hasta la cola (spr.c) */
     beq     .Lempty
     subq.w  #1,%d1    /* contador para dbf */
     lea     sprPool,%a0

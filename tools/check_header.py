@@ -5,15 +5,26 @@ El campo rom_end de la cabecera es la ULTIMA direccion del cartucho. Se
 escribe a mano en src/rom_header.c, asi que se queda atras en cuanto el ROM
 crece: un ROM mas grande que lo que dice su cabecera es el tipo de cosa que no
 se nota en un emulador y si en un flashcart.
+
+Uso: tools/check_header.py [ruta del ROM]   (por defecto, out/rom.bin)
 """
 import os
 import sys
 
-ROM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "rom.bin")
+ROM = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "out", "rom.bin"))
 
 
 def main():
-    data = open(ROM, "rb").read()
+    if len(sys.argv) > 2:
+        print(f"uso: {sys.argv[0]} [rom.bin]", file=sys.stderr)
+        sys.exit(2)
+    rom = sys.argv[1] if len(sys.argv) == 2 else ROM
+    print(f"  rom       {rom}")
+    try:
+        data = open(rom, "rb").read()
+    except OSError as e:
+        print(f"ERROR: no se puede leer {rom}: {e.strerror}", file=sys.stderr)
+        sys.exit(2)
     size = len(data)
     rom_end = int.from_bytes(data[0x1A4:0x1A8], "big")
     console = data[0x100:0x110].decode("ascii", "replace")
@@ -33,13 +44,12 @@ def main():
     sram_type = int.from_bytes(data[0x1B2:0x1B4], "big")
     sram_start = int.from_bytes(data[0x1B4:0x1B8], "big")
     sram_end = int.from_bytes(data[0x1B8:0x1BC], "big")
-    print(f"  sram      tipo 0x{sram_type:04X}  0x{sram_start:06X}-0x{sram_end:06X}")
-    # Bloque 6: el guardado (inc/save.h) usa 8 KB en los bytes impares.
-    if sram != "RA" or sram_type != 0xF820 or sram_start != 0x200001 or sram_end < 0x200001 + 2 * 128:
-        print("  ERROR: la SRAM de la cabecera no es la que usa inc/save.h")
-        bad = True
-    if size > sram_start - 1:
-        print("  ERROR: el ROM se solapa con la SRAM")
+    print(f"  sram      tipo 0x{sram_type:04X}  0x{sram_start:08X}-0x{sram_end:08X}")
+    # Sin SRAM (decision del usuario del 2026-11-20): el progreso vive solo en
+    # RAM. Los campos van en blanco (espacios); un "RA" haria que emuladores
+    # y flashcarts reserven un fichero de guardado que el juego no usa.
+    if data[0x1B0:0x1BC] != b" " * 12:
+        print("  ERROR: la cabecera declara SRAM y el juego no la usa")
         bad = True
     if "SAMPLE" in title or "DEMONSTRATION" in title:
         print("  ERROR: la cabecera sigue siendo la plantilla de SGDK")
