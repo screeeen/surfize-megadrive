@@ -71,6 +71,7 @@ TILESET weaponTiles "sprite/weapons.png" NONE NONE ROW
 TILESET weaponMlTiles "sprite/weapons_ml.png" NONE NONE ROW
 # oInGameHUD: BULLETS y KILLS van con global.myFont, que es sFont2 a 16 px
 TILESET hudFont    "sprite/hudfont.png" NONE NONE ROW
+# Logo ARENA del menú, desde el arte de MonsterLite: python3 tools/ml_arena_logo.py
 TILESET logoTiles   "sprite/logo.png" NONE NONE ROW
 # El logo de Screen Implosion, desde el arte de MonsterLite: python3 tools/ml_logo.py
 IMAGE silogoImage "sprite/silogo.png" NONE ALL
@@ -84,7 +85,6 @@ TILESET barTile     "sprite/bar.png" NONE NONE ROW
 # ---------------------------------------------------------------------------
 WAV sfxShot       "sound/sfxShot.wav"       XGM2
 WAV sfxLaser      "sound/sfxLaser.wav"      XGM2
-WAV sfxBoom       "sound/sfxBoom.wav"       XGM2
 WAV sfxAranaMorte "sound/sfxAranaMorte.wav" XGM2
 WAV sfxDust       "sound/sfxDust.wav"       XGM2
 WAV musMenu       "sound/musMenu.wav"       XGM2
@@ -99,7 +99,9 @@ WAV spk4          "sound/spk4.wav"          XGM2
 # Bloque 12: los sonidos de MonsterLite, con el clip que les pone la escena
 # (biblioteca de SoundManager en Assets/Scenes/MonsterLite.unity). Desde los
 # WAV y el AIFF de Assets/Sound con:  python3 tools/ml2md_audio.py
-# El boomSpeechSnd (Boom.wav) es el sfxBoom de arriba y no se repite.
+# Desde la quinta entrega, la bomba y los rayos van mezclados en una muestra
+# cada uno (mlBombMix: Boom.wav, bombaamarilla y xplosions; mlRaysMix:
+# bombaamarilla y rays): las sueltas ya no se usan y no están.
 # ---------------------------------------------------------------------------
 WAV mlShot        "sound/mlShot.wav"        XGM2
 WAV mlWBlock      "sound/mlWBlock.wav"      XGM2
@@ -107,12 +109,9 @@ WAV mlLaser       "sound/mlLaser.wav"       XGM2
 WAV mlTway        "sound/mlTway.wav"        XGM2
 WAV mlCircular    "sound/mlCircular.wav"    XGM2
 WAV mlXpl         "sound/mlXpl.wav"         XGM2
-WAV mlBombaAm     "sound/mlBombaAm.wav"     XGM2
 WAV mlPowUp       "sound/mlPowUp.wav"       XGM2
 WAV mlRepetea     "sound/mlRepetea.wav"     XGM2
 WAV mlArena       "sound/mlArena.wav"       XGM2
-WAV mlXplosions   "sound/mlXplosions.wav"   XGM2
-WAV mlRays        "sound/mlRays.wav"        XGM2
 WAV mlAwesome     "sound/mlAwesome.wav"     XGM2
 # caralludoSpeechSnd es Fafarre.aiff, que playCaralludoClip toca a tono 2
 WAV mlCaralludo   "sound/mlCaralludo.wav"   XGM2
@@ -120,3 +119,5 @@ WAV mlCaralludo   "sound/mlCaralludo.wav"   XGM2
 WAV mlDing        "sound/mlDing.wav"        XGM2
 WAV mlBtnShort    "sound/mlBtnShort.wav"    XGM2
 WAV mlBtnLong     "sound/mlBtnLong.wav"     XGM2
+WAV mlBombMix     "sound/mlBombMix.wav"     XGM2
+WAV mlRaysMix     "sound/mlRaysMix.wav"     XGM2

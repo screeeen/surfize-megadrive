@@ -45,7 +45,8 @@
 //    hasta que se agota shake_time.
 //
 // Si coinciden, manda la grande de MonsterLite, luego la pequeña y luego la
-// del GML. Varias corrutinas de MonsterLite a la vez se quedan con el tiempo
+// del GML, salvo que la del GML sea más fuerte que la pequeña (la de la
+// bomba): entonces manda ella. Varias corrutinas de MonsterLite a la vez se quedan con el tiempo
 // mayor (en Unity corren en paralelo y el punto lo pone la última de cada
 // frame; aquí la de más alcance).
 //
@@ -106,7 +107,8 @@ void Shake_small(u16 frames);
 #define SHAKE_MAG(v)    GML_FPOS(v)
 #define SHAKE_FADE(v)   GML_SPEED(v)
 
-// stShake(_time, _magnitude, _fade)
+// stShake(_time, _magnitude, _fade). A diferencia del GML, si hay una en
+// marcha más fuerte que la nueva, la nueva no hace nada (src/shake.c).
 void Shake_start(u16 time, fix16 magnitude, fix16 fade);
 
 // oPlayer/Step_0: cada disparo con arma. Desde el bloque 12, sólo el PIVOT y
@@ -115,6 +117,21 @@ void Shake_start(u16 time, fix16 magnitude, fix16 fade);
 
 // oEstallido/Create_0: la metralla
 #define Shake_estallido()   Shake_start(GML_FRAMES(5),  SHAKE_MAG(15),  SHAKE_FADE(1.0))
+
+// oExplosionCruz/Create_0: la más violenta del GML, 30 px durante 8 frames y
+// bajando 0,14 px por frame (unos 4 s en total). Desde el 2026-11-22 vuelve
+// a ser la de la bomba de MonsterLite, sumada a su shake(1) (decisión del
+// usuario: "blancazo en pantalla y super screenshake"; la sacudida es la del
+// bloque 8 y el blancazo, el de fffe0af). Desde el 2026-11-26 ninguna más
+// floja la corta (ver Shake_start).
+// Desde el 2026-11-27 dura la mitad (decisión del usuario): el doble de
+// desvanecimiento que oExplosionCruz (1,2 en vez de 0,6), con el mismo pico y
+// los mismos 8 frames arriba. Medido por el verificador, de la bomba a la
+// cámara quieta: 137 frames, frente a 284 antes.
+// Desde el 2026-11-27 (segunda vez, decisión del usuario) vuelve a durar la
+// mitad: desvanecimiento 2,4 (cuatro veces el de oExplosionCruz), mismo pico y
+// mismos frames arriba. Medido: 70 frames de la bomba a la cámara quieta.
+#define Shake_bomb()        Shake_start(GML_FRAMES(10), SHAKE_MAG(150), SHAKE_FADE(2.4))
 
 // --- Las dos ---------------------------------------------------------------
 

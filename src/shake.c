@@ -55,7 +55,14 @@ void Shake_small(u16 frames)
 void Shake_start(u16 time, fix16 magnitude, fix16 fade)
 {
     // stShake no mira si ya hay una sacudida en curso: la sustituye, aunque la
-    // nueva sea más floja que la que había.
+    // nueva sea más floja que la que había. Aquí manda la más fuerte hasta
+    // que se apague (decisión del usuario del 2026-11-26): la de la bomba
+    // (30 px) se quedaba en 18 frames porque la metralla de la siguiente baja
+    // (Shake_estallido, 3 px) o el siguiente disparo del PIVOT o el PARA
+    // (Shake_shot, 1 px) la sustituían. Una igual o más fuerte sí sustituye,
+    // como en el GML: así el fuego continuo sigue renovando la suya.
+    if (shActive && (magnitude < shMag)) return;
+
     shTime   = (s16)time;
     shMag    = magnitude;
     shFade   = fade;
@@ -130,11 +137,26 @@ void Shake_update(void)
     if (smallLeft)
     {
         smallLeft--;
-        g_shakeX = rnd(ML_SHAKE_SMALL);
-        g_shakeY = rnd(ML_SHAKE_SMALL);
-        if (shActive) { const s16 x = g_shakeX, y = g_shakeY; gmlStep(); g_shakeX = x; g_shakeY = y; }
-        apply();
-        return;
+
+        // La más fuerte manda (como en Shake_start): si la del GML pasa de
+        // los 4 px de la pequeña, se ve ella y la pequeña no; si no, la
+        // pequeña, y la del GML sigue contando por debajo. Con las que hay,
+        // sólo la de la bomba (30 px, que tarda ~180 frames en bajar de 4)
+        // gana a la pequeña: la metralla (3 px) y la del disparo (1 px)
+        // nunca, así que durante un shakeSmall de MonsterLite (rayos, armas,
+        // bolas que persiguen) esas dos no se ven.
+        if (shActive && (((shMag + FIX16(0.5)) >> FIX16_FRAC_BITS) > ML_SHAKE_SMALL))
+        {
+            if (gmlStep()) { apply(); return; }
+        }
+        else
+        {
+            g_shakeX = rnd(ML_SHAKE_SMALL);
+            g_shakeY = rnd(ML_SHAKE_SMALL);
+            if (shActive) { const s16 x = g_shakeX, y = g_shakeY; gmlStep(); g_shakeX = x; g_shakeY = y; }
+            apply();
+            return;
+        }
     }
 
     if (gmlStep())

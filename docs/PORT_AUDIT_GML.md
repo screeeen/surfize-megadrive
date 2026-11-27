@@ -2250,7 +2250,7 @@ Desde el 2026-11-15 la fuente de verdad es **MonsterLite** (Unity, C#); el GML p
 | 9. HUD, mensajes y fondo por nivel | ✅ hecho (2026-11-20), con el deslizamiento, la sombra en todas las fuentes y SCORE en grande que pidió el usuario; el color de fondo por nivel no se porta (Q16); Q22 resuelta ("!!!" en la fila 12); pregunta abierta: balas que no caben junto a la puntuación (Q23) |
 | 10. Logros | ✅ hecho (2026-11-21), con la lista y las recompensas del usuario (Q18 cerrada). Todo invención: MonsterLite no tiene logros |
 | 11. Tutorial | ⏳ pendiente (Q19) |
-| 12. Efectos y sonido | ✅ hecho (2026-11-21), con las correcciones de la verificación y las decisiones del usuario del mismo día: líneas holo en tramos de puntos (fondo de 504 tiles), fuera la muerte del GML y los PCM sin uso, y sin música en partida (Q21 revocada) |
+| 12. Efectos y sonido | ✅ hecho (2026-11-21; cuarta entrega 2026-11-23; quinta 2026-11-26), con las correcciones de la verificación y las decisiones del usuario: líneas holo en tramos de puntos (fondo de 504 tiles) en su propio trozo de la tabla del VDP, fuera la muerte del GML y los PCM sin uso, sin música en partida (Q21 revocada), la bomba y los rayos en una muestra cada uno, y la sacudida más fuerte manda. Plan de 50 fps: paso 1 (montador) hecho; el resto, pendiente |
 
 ### Bloque 1: estructura de partida
 
@@ -2584,6 +2584,24 @@ Decisión del usuario: el logo se convierte desde el arte de MonsterLite. `tools
 |---|---|---|
 | El fundido va en los 8 niveles del VDP | Paleta de 3 bits por componente | Sube a saltos |
 | Empieza unos 15 f después de encender | Lo que tarda en cargar el driver de sonido (`Audio_init`) | — |
+
+**Cambios del 2026-11-27 (decisión del usuario: "los fundidos del principio del logo... se va al corte").**
+- `Logo_show`: entrada de 40 f hasta el blanco entero (antes llegaba a 0,8, como el original), 30 f quieto y salida a negro en 25 f. Al acabar apaga la pantalla (`VDP_setEnable(FALSE)`), que enseña el color 0, todavía negro.
+- `src/main.c`: sin el arnés, el color 0 no se pone en `ROOM_BG_COLOR` al arrancar. Tras `Game_init` se vacía la cola de DMA, se copian las 64 entradas de la CRAM (con el 0 en `ROOM_BG_COLOR`), se pone todo en negro, se enciende la pantalla y `PAL_fadeInAll` (asíncrono, `MENU_FADE_IN_FRAMES` = 20) funde el menú desde negro. Antes se veía el fondo gris y el menú montándose durante ~30 f.
+- Capturas de la secuencia (BlastEm): logo subiendo, logo, logo bajando, negro, menú fundiendo, menú.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| El logo llega al blanco y sale fundiendo; el menú entra fundiendo | Decisión del usuario | El arranque dura ~1,9 s más fundido del menú (0,4 s), en vez de 0,8 s con corte |
+
+### Logo ARENA en el menú (2026-11-27)
+
+Decisión del usuario: en el menú va el logo de ARENA, no el de SURFIZE (sprite176 del GML). Es el de MonsterLite: `S/menu.cs` dibuja la textura `splash` del prefab `Prefabs/States/Menu.prefab`, que es `Assets/Art/splash_alt.png` (ARENA blanco sobre transparente, dibujo de 974×818 en 1200×1200; referencia encontrada por GUID en el prefab). `tools/ml_arena_logo.py` → `res/sprite/logo.png` (56×56, 7×7 tiles, grises de HOLE_PAL); `tools/gm2md.py` ya no escribe ese fichero. El código del menú (`drawLogo`, composición con los agujeros) no cambia.
+
+| Qué | Por qué | Consecuencia en juego |
+|---|---|---|
+| ARENA a 56×47 px en el hueco de 7×7 del logo del GML; MonsterLite lo pinta a pantalla completa (`ScaleToFit`) | No queda VRAM: los tiles del menú van a la VRAM sobrante y el logo reutiliza sus 49 | Logo pequeño en el centro del menú |
+| El arte sale de MonsterLite y no del GML | Decisión del usuario (como la moneda y los iconos, Q11) | — |
 
 ### Bloque 6: guardado en SRAM (2026-11-16)
 
@@ -3021,7 +3039,7 @@ La bala fina no sacude en MonsterLite: se quita el `stShake(1, 1, 0.1)` del GML,
 
 **ROM: 1 179 648 bytes (0x120000, 1,125 MB)**, antes del bloque 1 MB: +261 KB de PCM de MonsterLite y −150 KB de los nueve PCM del GML que se quitan. `rom_end` de `src/rom_header.c` pasa de 0x0FFFFF a **0x11FFFF**; `tools/check_header.py` compara con el tamaño real, no hace falta tocarlo. Hasta 4 MB no hace falta mapper.
 
-**Rendimiento** (`tools/measure.sh`, vueltas de 600 y bajas; antes del bloque, 505/34). La medida va al borde del frame: un coste pequeño mueve decenas de vueltas, y cualquier cambio en el uso de `random()` cambia la partida entera. Cada fila quita una cosa a la anterior, con la misma partida:
+**Rendimiento** (`tools/measure.sh`, vueltas de 600 y bajas; antes del bloque, 505/34). *Nota de la sexta entrega (2026-11-27): 505/34 es el bloque 8 (`1838619`) con la SRAM de entonces; HEAD `cbe33ae`, el bloque 12 tal como se subió, da **482/25**, y ésa es la referencia de la cuarta entrega en adelante.* La medida va al borde del frame: un coste pequeño mueve decenas de vueltas, y cualquier cambio en el uso de `random()` cambia la partida entera. Cada fila quita una cosa a la anterior, con la misma partida:
 
 | Build | Vueltas / bajas |
 |---|---|
@@ -3058,17 +3076,220 @@ Lo que se puede decir: el **coste de CPU seguro es la estela** (~5 vueltas en el
 | El HUD y el texto se sacuden con el campo | Van en el plano A; en MonsterLite son OnGUI | Con la grande (±80 px), el HUD salta 1-3 frames |
 | Las sacudidas no corren con el tiempo parado ni en el hitstop | Mover los planos con los sprites quietos los descuadraría | Una sacudida de 1-8 frames puede quedar a medias hasta que corre el tiempo |
 | Estela de puntos, gris, y sin línea de un borde al otro al hacer wrap | El VDP no traza líneas ni mezcla; en Unity el wrap tira una línea de lado a lado | La estela es punteada |
-| Líneas a las holo: tramos pre-dibujados de puntos de 2×2 a 2,8-3,6 px en 7 direcciones, con topes de 40 tramos y 6 por franja (decisión del usuario; direcciones y topes, invención) | El VDP no traza líneas; 80 sprites por frame y 20 por línea | Pequeños escalones donde la dirección de la línea cae entre dos de las 7; con muchas holo, huecos entre tramos |
+| Líneas a las holo: tramos pre-dibujados de puntos de 2×2 a 2,8-3,6 px en 7 direcciones, con un tope de 40 tramos y sólo en las entradas de la tabla que deje libres el juego, detrás de todo (decisión del usuario; direcciones y topes, invención; sin el tope de 6 por franja desde la quinta entrega) | El VDP no traza líneas; 80 sprites por frame y 20 por línea | Pequeños escalones donde la dirección de la línea cae entre dos de las 7; con muchas holo, huecos entre tramos; con la arena llena, las líneas (las últimas holo primero) no se ven |
 | Sin el tono aleatorio 0,9-1,1, sin los tonos que bajan (0,25 en el game over, que sube 0,1 por frame en partida) y la fanfarria de CARALLUDO a tono 2 fijo (en MonsterLite baja 0,1 por frame hasta 0,25) | XGM2 no cambia el tono de una muestra; los tonos fijos (ding ×3, fanfarria ×2) se aplican al convertir | Todo suena a su tono |
 | Una voz donde MonsterLite superpone varias (TWAY ×3, `bombaXPL` por enemigo, AWESOME en cada `OnGUI`) | 2 canales de efectos | Suena una vez |
+| La bomba (BOOM + estallido + EXPLOSIONS) y los rayos (estallido + RAYS) suenan como una sola muestra mezclada en la conversión (quinta entrega, decisión del usuario del 2026-11-26) | 2 canales de efectos: separadas, el estallido de los rayos se quedaba sin canal | Igual que la suma de Unity (sin recorte); no se puede cortar una sin la otra |
+| La sacudida más fuerte manda hasta que se apaga: una más floja (metralla, disparo) no sustituye a la que está en marcha (quinta entrega, 2026-11-26) | "Super screenshake" de la bomba (decisión del usuario): la metralla de la siguiente baja la cortaba a los 18 frames | En el GML `stShake` sustituye siempre; durante la bomba, la metralla y la del disparo no se notan |
 | Prioridades, grupos y reparto de canales | Invención del port | Con mucho a la vez, se pierden disparos e impactos antes que voces; un disparo nuevo corta al anterior |
 | Fondo de 504 tiles en vez de 528 | Decisión del usuario: VRAM para las líneas holo | +3 % de error medio en el fondo, en celdas de detalle sueltas |
 | Las voces de arma del GML siguen en el estante de la tienda, junto al botón corto | MonsterLite sólo toca el botón | — |
-| Las líneas holo se rehacen de 2 en 2 por frame cuando se mueve la nave (petición del usuario del 2026-11-22: que no se noten en el rendimiento) | Rehacer las 10 cada frame costaba un 15 % con 10 holo | Con 10 holo, cada línea va hasta 4 frames (~6 px) tarde; con 1-3, 1-2 frames |
+| Las líneas holo salen de una tabla precalculada en celdas de 8 px de distancia holo-nave y se anclan en la holo (cuarta entrega, 2026-11-22; sustituye al reparto de 2 en 2 por frame de la tercera) | Que no se noten en el rendimiento (petición del usuario) | Sin retraso: cada línea está siempre hecha con la celda en que está la nave; su extremo de la nave se desvía como mucho ±4 px (debajo de la nave) |
+| La bomba vuelve a tener el blancazo de `fffe0af` (la paleta a medio camino del blanco 50 frames, `oExplosionCruz` del GML) y la sacudida de 30 px del bloque 8 (`1838619`, `Shake_cruz`), que se apaga en ~4 s, encima del `shake(1)` de MonsterLite (decisión del usuario del 2026-11-22). Desde la quinta entrega ninguna sacudida más floja la corta (2026-11-26) | "Blancazo en pantalla y super screenshake" | MonsterLite sólo sacude un frame; el blancazo tapa también el HUD (comparte paleta); en el GML `stShake` sustituye siempre, aunque la nueva sea más floja |
+| A 45° los puntos de las líneas van cada 4,2 px (paso (3,3)) | Con (2,2) los puntos de 2×2 se tocaban por la esquina y se veía una escalera continua | La diagonal, algo más espaciada que el resto (2,8-3,6 px) |
 | ARENA suena al salir el splash tras encender o RESET | En MonsterLite el menú sólo se crea al cargar la escena | No vuelve a sonar tras el game over |
 | **Sin música en partida** | Decisión del usuario del 2026-11-21 (Q21 revocada) | MonsterLite tiene una pista `.xm` al azar en cada partida, en bucle, que baja de tono al parar el tiempo y de volumen al morir; el port, ninguna. En el menú y el game over sigue `musMenu` del GML |
 | La nave no se agranda a ×4 (`landingAnim`) en la muerte ni con el tiempo parado | 144 tiles por frame y quedan 6 | Se queda a su tamaño |
 | El fondo envuelto en la sacudida grande: exacto en horizontal; en vertical asoman 16 px de las filas 0-1 por encima | El plano mide 32 filas para 30 del campo | Sólo en la sacudida grande, 1-3 frames |
+
+#### Sexta entrega (2026-11-27): la bomba a la mitad, arreglos de la verificación, C para todo el ensamblador y arquitectura portable
+
+Tras la verificación de la quinta, con decisiones nuevas del usuario. Entregada por pasos (cada uno compila y está documentado).
+
+**1. La sacudida de la bomba dura la mitad** (decisión del usuario). `Shake_bomb` (`inc/shake.h`) desvanece 1,2 por frame del GML en vez de 0,6: el mismo pico (un frame a ±79 del `shake(1)`, luego ±30) y el mismo blancazo, y la caída al doble de ritmo. Medido con una bomba en el arnés y la arena llena (`out/bench/bomb.py`, |`g_shakeX`| vuelta a vuelta): ±79, nueve vueltas a ±30 y bajando ~1 px cada 3-4 vueltas hasta 1. En frames (medido por el verificador, de la bomba a la cámara quieta): **137 frames, frente a 284 antes**. Lo que se ve después son las metrallas de bajas posteriores (3 px), que ya pueden sustituirla cuando ha bajado de 3.
+
+**Segunda reducción (2026-11-27, decisión del usuario: "acorta el tiempo de la bomba otra vez").** `SHAKE_FADE(2,4)`: cuatro veces el desvanecimiento de oExplosionCruz, mismo pico y mismos frames arriba. Medido por el verificador (misma partida y arnés que la medida de 137): un frame a ±79, ocho a ±30 y bajada de 0,576 px por frame; **70 frames de la bomba a la cámara quieta**, contando dos pausas de hitstop.
+
+**2. Arreglos de la verificación.**
+- *Arranque de la rotación* (`src/spr.c`, `src/spr_a.s`). Los cuartos de la tabla salen ahora del `nr` del primer frame de cada vuelta de cuatro, recortado a las entradas que haya: ya no se cuentan entradas dos veces ni ninguna. Y la rotación arranca en cuanto una franja pasa de 20 sprites con lo sumado hasta ese frame: el contador de sprites de cada franja empieza en 0x8000 − 21, así que al pasar de 20 se le pone el signo y `Spr_bandAdd` lo ve con un `bmi` por franja (~8 ciclos), sin esperar al cuarto frame. Las celdas (320 px por línea) se siguen mirando al cuarto frame. Las franjas fuera de la pantalla también pueden dar el aviso temprano (una rotación de más, sin otro efecto). `tools/measure.sh`: 540/25, igual.
+- *DMA sin comprobar* (`src/spr.c`). Si `DMA_queueDmaFast` falla (cola llena), `Beam_linesDmaLost` da por perdidas todas las ranuras de las líneas en la VRAM y se vuelven a subir en el frame siguiente.
+- *`linesRemap` con dos holo en el mismo píxel*. Cada línea vieja se empareja con una holo nueva que no tenga ya pareja; y si al acabar no cuadra el número, se rehacen todas (no debería pasar: el orden del pool no cambia).
+- *`_Static_assert`* del tamaño de `SprBandRow` (8 bytes, lo lee `Spr_bandAdd`).
+- *La referencia de `measure.sh`*: HEAD `cbe33ae` da 482/25 (nota añadida donde se citaba 505/34, que es del bloque 8).
+- *"Ruido" en las filas de moverse*: el verificador midió con un arnés determinista (la nave la mueve el propio juego con un patrón fijo, `-DAUTOMOVE`) y la diferencia es real: −4,4 / −4,2 / −5,2 % moviéndose. Las filas de la quinta entrega que decían "ruido" se quedan como estaban medidas, pero esa lectura era incorrecta: ver la tabla del punto 3.
+
+**3. Las líneas: subir sólo las coordenadas.** El usuario lo aprobó (DMA de paso 8, o lo más barato). Medido antes de hacerlo: cada transferencia encolada aparte cuesta ~850 ciclos de CPU (`DMA_queueDmaFast`, medido con `out/bench/cyc.py`), y con la sacudida harían falta dos (las y y las x); lo que se ahorra son 4 bytes de DMA (~10 ciclos) y ~15 ciclos de copia por ranura a la vista, ~775 ciclos con 31 ranuras. **No compensa**: lo más barato sigue siendo lo de ahora, una copia de las ranuras a la vista en el mismo DMA que la tabla del juego. No se ha cambiado. Figuras con el arnés determinista (`out/bench/det/`, tomado del verificador: `-DAUTOMOVE`, `HOLO_SET` 1-3, `HOLO_SAFE`, 6 partidas por build, con y sin líneas):
+
+| Escenario (estrés, 10 holo salvo `sh`) | Con líneas | Sin líneas | Diferencia (vueltas) |
+|---|---|---|---|
+| `s1` (colocación 1, no mueren), quieta | 401,0 | 410,5 | −2,3 % |
+| `s1`, moviéndose | 358,2 | 373,2 | −4,0 % |
+| `s2` (fila horizontal, no mueren), quieta | 384,2 | 398,5 | −3,6 % |
+| `s2`, moviéndose | 364,0 | 384,3 | −5,3 % |
+| `k1` (colocación 1, mueren), quieta | 390,2 | 398,2 | −2,0 % |
+| `k1`, moviéndose | 350,8 | 367,0 | −4,4 % |
+| `PORT_STRESS_HOLO`, quieta | 364,8 | 369,2 | −1,2 % |
+| `PORT_STRESS_HOLO`, moviéndose | 339,2 | 348,8 | −2,8 % |
+| Sin holo (`plain`) | 540,8 | — | — |
+
+Las bajas son iguales (o difieren en 1) con y sin líneas: es la misma partida, y la diferencia es coste de verdad, no ruido. **El objetivo de <1 % no se alcanza**: −1,2 a −3,6 % con la nave quieta y −2,8 a −5,3 % moviéndose. El coste es el que mide `out/bench/cyc.py` (0,6-1,1 % del tiempo de CPU más el DMA de las ranuras a la vista), amplificado porque el estrés va al borde del frame: cada frame que se pasa pierde una vuelta entera. Lo que queda por probar, de más a menos ganancia y todo sin cambio visual: que la copia con la sacudida no vuelva a subir las ranuras que no se ven en ninguna línea de pantalla con sitio (no medido), y hacer más ligero el resto del frame (plan de 50 fps), que aleja el estrés del borde.
+
+**4. Todo el ensamblador tiene su versión en C** (requisito del usuario: arquitectura que facilite otro port). `-DPORT_NO_ASM=1` compila sin `src/spr_a.s` ni `src/beam_a.s` y con sus equivalentes en C, que hacen la misma cuenta: `Spr_build`, `Spr_bandAdd`, `Spr_bandOver` (`src/spr.c`) y `Beam_linesScan`, `Beam_linesCopy`, `Beam_linesFlush` (`src/beam.c`). `PORT_SPR_C` desaparece (era lo mismo sólo para el montador). Comprobado con `out/bench/check_lines.py` sobre builds `PORT_NO_ASM=1` (10 holo que mueren y que no, 3 holo, quieta y moviéndose, 120 paradas): 0 diferencias con el modelo, igual que el ensamblador. Si se toca uno, hay que tocar el otro.
+
+**5. Topes del hardware en un sitio**: `inc/hwlimits.h` (sólo `#define`, lo incluyen también los `.s`): 80 entradas de la tabla, 20 sprites y 40 celdas por línea, 8 bytes por entrada, las 40 ranuras de las líneas y la Y de aparcar. Los usan ya `src/spr_a.s`, `src/spr.c`, `inc/spr.h` e `inc/beam.h`.
+
+**6. El plan de 50 fps, pasos 2 a 5: no han entrado en esta entrega** (rejilla de colisiones, gusanos, VBlank/DMA, lo del suelo). Siguen como en la tabla del plan.
+
+#### Arquitectura para portar: lo que hoy la rompe (2026-11-27)
+
+Requisito del usuario: la lógica del juego no toca el VDP, el DMA, la tabla de sprites ni SGDK; todo eso detrás de una capa fina (`spr`, `beam`, `audio`, `vramspr`, entrada) con interfaces que tengan sentido en otra plataforma; cada rutina en ensamblador con su versión en C (`PORT_NO_ASM`); tablas precalculadas sólo con su generador documentado; los topes del hardware con nombre y en un sitio. Aplicado a lo tocado en esta entrega (puntos 4 y 5). Sin coste: los cambios son `#define`, y las versiones en C sólo entran con `PORT_NO_ASM`. Lo que queda, con propuesta (no hecho; sin refactor grande ahora):
+
+| Dónde | Qué lo rompe | Propuesta |
+|---|---|---|
+| `src/game.c` | Llama a `VDP_*` y `PAL_*` directamente (textos del HUD, paletas del blancazo, `VDP_showFPS` de depuración) y usa `vtimer`/`JOY_readJoypad` de SGDK | Una capa `gfx_text`/`gfx_pal` y `input` con funciones en línea; el juego sólo llama a ellas |
+| `src/effect.c` (`Effect_bombFlash`) | Escribe las paletas del VDP | `Gfx_flash(nivel)` en la capa de render |
+| `src/shake.c` | Escribe el scroll de los planos (`VDP_setHorizontalScrollVSync`) | La cámara como dato (`g_shakeX/Y`) y un `Gfx_camera(x, y)` en la capa |
+| `src/hole.c`, `src/bg.c`, `src/hud.c` | Componen tiles en planos con SGDK | Ya son módulos de render: mover a una carpeta `render/` y que el juego llame por interfaz |
+| `src/audio.c` | Bien aislado (XGM2 sólo aquí), pero los canales y prioridades son de XGM2 | Dejar `Audio_sfx(id)` como interfaz; el reparto de canales, de la implementación |
+| `src/enemy.c` (`SPIDER_DMA_WINDOW`), `src/snake.c` | Deciden subidas de frames por DMA (`VStream`) dentro de la lógica | Que la lógica pida "frame N" y la capa (`vramspr`) decida cuándo sube; el tope por frame, en `inc/hwlimits.h` |
+| `inc/spr.h` | `MDSpr` tiene la forma de la entrada del VDP (es lo que hace barato el montador) | Aceptable como detalle de la capa; la lógica sólo usa `sprPos`/`sprHide`/`sprAnim` |
+| Topes repartidos | `VTILE_SHARED_TILES`, `MDSPR_POOL`, `SPIDER_DMA_WINDOW`, el tamaño de la cola de DMA, los 266 PCM por frame de `audio.c` | Llevarlos a `inc/hwlimits.h` |
+| Ensamblador sin C | Ninguno tras esta entrega (`spr_a.s`, `beam_a.s` tienen versión en C) | Mantenerlo: cada `.s` nuevo, con su C y su comprobación |
+| `src/menu.c` (27 llamadas `VDP_`/`PAL_`) y `src/logo.c` (6) | Las pantallas de menú y logo dibujan directamente con SGDK | Son render: que hablen con una capa de texto/planos/paletas (la misma que `game.c`), no con el VDP |
+| `random()` de SGDK y `fix16`/`sinFix16` en la lógica (`entity.c`, `projectile.c`, `debris.c`, `effect.c`) | El generador de números y la aritmética fija son los de SGDK: en otra plataforma, otra secuencia y otros redondeos, y la partida deja de ser la misma | Un `rng.h` propio (el mismo algoritmo en todas partes) y un `fixmath.h` con el formato y las tablas del port; SGDK sólo detrás |
+| `src/beam.c` | La geometría de las líneas (celdas, tramos, reparto por holo) va mezclada con la disposición de la tabla del VDP (ranuras al revés, enlaces, copia con sacudida, DMA) | Partir en `lines.c` (qué tramos van, en coordenadas del campo) y la parte de `spr` que los pone en la tabla |
+
+#### Quinta entrega (2026-11-26): líneas holo por debajo del 1 %, la bomba que no se corta, mezclas y el plan de 50 fps
+
+Tras la verificación de la cuarta, con decisiones nuevas del usuario: las líneas, **menos del 1 % en todos los casos** (también nave moviéndose, holo en posiciones irregulares y holo que no mueren) y sin cambio visual; primero la velocidad, después la ROM; las mezclas por evento, aprobadas; el plan de 50 fps, aprobado, sin tocar el juego.
+
+**1. Las líneas holo, otra vez desde el principio.** Medido con un arnés nuevo (`out/bench/`, fuera del repo: copia el árbol, mete el contador de vueltas, `HOLO_N` en posiciones irregulares, `HOLO_KILLABLE=0` para holo que no mueren, `-DNO_LINES`, y la partida con la nave quieta o moviéndose; media de 6 partidas que arrancan en frames distintos) y con los ciclos exactos del depurador (`cycle` de BlastEm, que va en ciclos del reloj maestro: /7 para el 68000) en cada llamada:
+
+- *Dónde se iba el tiempo en la cuarta entrega*: los 40 puntos de las líneas eran ranuras del pool, así que el montador las recorría y copiaba cada frame (~140 ciclos cada una a la vista: ~5 600 por frame con 10 holo); rehacer una línea en C, ~5 200 ciclos; y con la arena llena (`satUsed` 80) se calculaban líneas que no entraban en la tabla.
+- *El sistema nuevo* (`src/beam.c`, `src/beam_a.s`, `tools/ml_lineseg.py`):
+  - las líneas **no van en el pool**: tienen las entradas 40 a 79 de la tabla del VDP, al revés (la ranura 0 es la 79), con los enlaces fijos por ranura. El juego va en las entradas 0 a n−1; las líneas toman las que quedan libres (`80 − n`, 40 como mucho) y van **siempre detrás de todo el juego en la lista**: ni le quitan sitio en la tabla de 80 ni, si una línea de pantalla se llena (20 sprites, 320 px), le quitan sprites al juego; lo que se pierde es de ellas. Con la tabla llena no entra ninguna y **no se calcula nada** de lo que no cabe: el recorrido para en la primera línea que no cabe y lo de detrás se mira cuando vuelva a caber;
+  - una **imagen sin sacudida** (`lineSat`) que sólo se toca al rehacer una línea, y la copia que se sube (`vdpSpriteCache[40..79]`) con la sacudida sumada al copiar (`Beam_linesCopy`, ~55 ciclos por ranura). La subida va **en el mismo DMA** que la tabla del juego y sólo llega hasta las ranuras que han cambiado; un `DMA_queueDmaFast` aparte costaba ~850 ciclos por frame;
+  - la tabla de tramos (`res/lineseg_tab.h`) guarda cada tramo **ya en la forma de la entrada del VDP y con los cuatro volteos** (16 bytes), la caja de cada celda (si cabe en el campo, ningún tramo se mira contra el borde) y los repartos por número de holo: colocar un tramo son dos lecturas y dos sumas de palabras largas (~120 ciclos, antes ~750);
+  - todo el camino caliente en ensamblador (`Beam_linesFlush`, `Beam_linesScan`): con la nave quieta, nada nuevo y las mismas entradas libres, unos 150 ciclos (contados sobre el código, no medidos); con la nave en marcha, una resta y una comparación por línea y eje movido, y rehacer sólo las que cambian de celda;
+  - **sin el tope de 6 sprites de línea por franja de 8 líneas** (opción que dio el usuario): ya no protegía nada, porque las líneas van detrás de todo y no cuentan para la rotación. Diferencia visible: en una franja con más de 6 tramos de línea, ahora se ven los que el VDP pueda pintar (antes se quitaban); nunca menos.
+- *Comprobado que es lo mismo que antes*: `out/bench/check_lines.py` para el juego en `Spr_flush` cada pocos frames y compara (a) la imagen en RAM con un modelo independiente en Python (la tabla de la cuarta entrega: tramo, dirección, volteo, reparto y recorte de bordes como entonces, sin el tope por franja) y (b) la lista que hay en la VRAM (`vs`): la del juego acaba en la 79, las de las líneas bajan hasta la 80−K y la última enlaza con 0, con sus posiciones iguales a la imagen más la sacudida. Con 1, 3, 6 y 10 holo, quieta y moviéndose, 270 paradas: **0 diferencias**.
+- *Coste medido* (ciclos del 68000 de `Beam_linesFlush`, 150 frames seguidos, arena llena): **0,58-0,74 % del tiempo con la nave quieta y 0,74-1,08 % moviéndose** según el caso (tabla de abajo). En la cuarta entrega no se midió así; por las cuentas de entonces eran ~5 600 ciclos por frame de montador para los 40 puntos y ~5 200 por línea rehecha. Lo que queda es casi todo la sacudida (copiar las ranuras a la vista cada frame en que cambia: con la metralla de las bajas, dos de cada tres frames) y rehacer las líneas que cambian de celda.
+- *Vueltas de 600* (media de 6 partidas que arrancan en frames distintos; las partidas moviéndose son caóticas y salen en dos grupos, ±5 %). Con holo que mueren, al morir una sin que cambie el reparto (de 10 a 9, de 8 a 7…) las líneas de las demás se quedan como están (`linesRemap`); antes se rehacían todas:
+
+| Escenario (`PORT_STRESS=1`) | Cuarta entrega: con / sin líneas | Quinta: con / sin líneas | CPU de las líneas (ciclos medidos, quinta) |
+|---|---|---|---|
+| `PORT_STRESS_HOLO`, nave quieta | 359,0 / 366,5 (−2,0 %) | 366,0 / 370,5 (**−1,2 %**) | 0,74 % |
+| `PORT_STRESS_HOLO`, moviéndose | 348,2 / 339,0 (+2,7 %, ruido) | 349,5 / 342,7 (+2,0 %, ruido) | 0,74 % |
+| 10 holo irregulares que no mueren, quieta | 358,0 / 368,0 (−2,7 %) | 366,5 / 371,0 (**−1,2 %**) | 0,58 % |
+| 10 holo irregulares que no mueren, moviéndose | 335,5 / 371,5 (−9,7 %) | 383,8 / 373,8 (+2,7 %, ruido) | 1,05 % |
+| 10 holo irregulares que mueren, quieta | (el verificador: −5,2 %) | 377,7 / 393,8 (**−4,1 %**) | 0,64 % |
+| 10 holo irregulares que mueren, moviéndose | — | 352,8 / 379,3 (−7,0 %, ruido) | 1,08 % |
+
+La columna de CPU es la parte del tiempo que se lleva `Beam_linesFlush` (todo lo de las líneas menos apuntar la posición de la nave en `Beam_update`), contada ciclo a ciclo en 150 frames seguidos; no incluye el DMA de las ranuras que cambian, que en los frames con sacudida son todas las que se ven (~19 ciclos de vblank por ranura). **No se llega al 1 % en todos los casos**: con la nave quieta y las holo que no mueren, sí en vueltas (−1,2 %); con holo que mueren, −4,1 %: quedan menos líneas y caben más, y con la sacudida de cada baja se copian y se suben todas cada frame (~55 + ~19 ciclos por ranura a la vista). Moviéndose, la CPU medida es ~1,05 % y las vueltas salen en dos grupos según la partida (±5 %): no se puede afirmar nada por debajo de eso. Lo que queda es la sacudida: para bajarla habría que no mover las líneas con ella (cambio visible) o subir sólo las x y las y con un DMA de paso 8 (la mitad de bytes, sin probar).
+
+**2. La ROM.** La tabla pasa de 87 a 239 KB (los cuatro volteos ya hechos, la caja por celda y los repartos) y la ROM a **1 441 792 bytes (`rom_end` 0x15FFFF)**. La simetría de la diagonal o los deltas de 8 bits costarían ciclos en cada tramo: no se hacen (decisión del usuario: primero la velocidad).
+
+**3. Las mezclas** (aprobadas): `tools/ml2md_audio.py` suma en 16 bits lo que MonsterLite toca a la vez y lo deja en una muestra: **la bomba** (`Boom.wav` + `bombaamarilla` + `xplosions`, 24,7 KB, 1,90 s) y **los rayos** (`bombaamarilla` + `rays`, 27,9 KB, 2,14 s), sin recorte (0 % de muestras pasadas). Cada evento ocupa un canal y deja el otro para disparos e impactos. Comprobado en el depurador (`out/bench/pcm.py`, punto de parada en `XGM2_playPCMEx`): con una bomba puesta en el arnés, el driver recibe `mlBombMix` una vez, en el canal 3, y los impactos siguen sonando en el 2. Las sueltas (`mlBombaAm`, `mlXplosions`, `mlRays`, `sfxBoom`, 85 KB) ya no se usaban y se han quitado; las mezclas son 53 KB: 32 KB menos de PCM.
+
+**4. La bomba que no se corta** (hallazgo del verificador). `Shake_start` sustituía siempre, como `stShake` del GML: la metralla de la siguiente baja (`Shake_estallido`, 3 px) o el siguiente disparo del PIVOT o el PARA (`Shake_shot`, 1 px) dejaban los 30 px de la bomba en 18 frames. Ahora **manda la más fuerte hasta que se apague**: una más floja que la que está en marcha no hace nada; una igual o más fuerte sí la sustituye (así el fuego continuo sigue renovando la suya). Medido con una bomba en el arnés y la arena llena: un frame a ±79 (el `shake(1)`), 11 frames a ±30 y bajando 1 px cada ~7 frames hasta 0, unos 210 frames (~4 s), con bajas entre medias. La regla de `src/shake.c` con la sacudida pequeña de MonsterLite (±4 px): también manda la más fuerte; con las que hay, sólo la bomba (más de 4 px durante ~180 frames) gana a la pequeña, y la metralla (3 px) y la del disparo (1 px) no se ven mientras dura un `shakeSmall` (rayos, armas, bolas). Es el efecto de la regla, no un fallo: queda documentado.
+
+**5. Menores.** El comentario repetido de `tools/ml_lineseg.py` ("marca el final.") desaparece con la tabla nueva. El centinela `lineStamp = 0xFFFF`, que podía coincidir con un `Proj_holoStamp` de verdad, es ahora una bandera aparte (`lineHolosOK`). La atribución de la bomba: el blancazo es de `fffe0af`, no del bloque 8 (corregido arriba y en `docs/MONSTERLITE_DECISIONES.md`).
+
+**6. El plan de 50 fps, paso 1 (el montador de sprites).** Medido dentro de `Spr_flush` en el caso peor: ~21 000 ciclos cada frame y **53 000-67 000 uno de cada cuatro**: la comprobación de franjas llenas, en C y entera, costaba ~35 000 ciclos de golpe (un cuarto de frame). Hecho:
+  - la comprobación, en ensamblador (`Spr_bandAdd`, `Spr_bandOver`) y **repartida**: un cuarto de la tabla por frame, y se mira al cuarto; el resultado vale para los cuatro siguientes, como antes. Rota parecido (13 y 17 de 30 frames muestreados, en partidas distintas);
+  - las ranuras aparcadas, de 44 a 34 ciclos, y las visibles, de ~150 a ~124 (`src/spr_a.s`);
+  - la tabla, directa a la cola de DMA (`DMA_queueDmaFast`): `VDP_updateSprites` costaba ~1 600 ciclos y ahora ~850.
+
+  `tools/measure.sh`: **486 → 540 vueltas de 600** (bajas: 25, la misma firma de partida). Los pasos siguientes (rejilla de colisiones, gusanos en ensamblador, VBlank) no han entrado en esta entrega.
+
+| Paso del plan | Estado | `tools/measure.sh` (estrés, vueltas / bajas) | 10 holo quieta, sin líneas → con líneas (vueltas) |
+|---|---|---|---|
+| Antes (cuarta entrega) | — | 486 / 25 | 382,5 → 375,3 (que mueren); 367,3 → 362,5 (que no) |
+| 1. Montador de sprites | **Hecho** | **540 / 25** | 393,8 → 377,7; 371,0 → 366,5 |
+| 2. Rejilla de colisiones (proyectiles, nave) | Pendiente | — | — |
+| 3. Gusanos en ensamblador | Pendiente | — | — |
+| 4. VBlank (repartir las subidas de VStream) | Pendiente | — | — |
+| 5. Lo del suelo, explosiones | Pendiente | — | — |
+
+Con el paso 1 el estrés pasa del 81 % al 90 % de frames completos; con 10 holo, del ~62 % al ~65 %. Para 600/600 con 10 holo falta lo grueso (proyectiles: las balas de las holo contra todo, ~29 % del frame en la cuarta entrega). Las dos opciones que tocan el juego (sonido a 6,65 kHz, IA lejana cada 2 frames) no se han tocado.
+
+#### Cuarta entrega (2026-11-22/23): líneas holo replanteadas, la bomba de antes y menores
+
+Tras el rechazo de la tercera entrega por el verificador, con decisiones nuevas del usuario. La muerte se queda como está.
+
+**1. El fallo de `lineRR`** (tercera entrega: el turno avanzaba antes del `break`, y con 3, 6 o 9 holo una línea de cada tres no se rehacía nunca). Desaparece con el sistema nuevo, que no va por turnos. Comprobado con 1 a 10 holo y la nave moviéndose 60 frames, leyendo en RAM la posición de la nave y la celda (`lineQ`) con la que está hecha cada línea: de 1 a 9 holo, ninguna línea desfasada ningún frame; con 10, 2 lecturas desfasadas de 1 frame (frames desbordados en los que el depurador lee a mitad de la actualización). **N = 0 frames** de retraso por diseño (la línea se rehace en el mismo frame en que la nave cambia de celda), 1 medido.
+
+**2. La bomba de antes** ("blancazo en pantalla y super screenshake", decisión del usuario). *Corrección de la quinta entrega (2026-11-26): esta entrega decía "como en el bloque 8", y no es exacto: el bloque 8 (`1838619`) sólo tenía la sacudida (`Shake_cruz`); el blancazo (`Effect_bombFlash`) se lo quitó el bloque 8 y viene de la entrega anterior, `fffe0af` ("surfize 2 bloque"), que tenía las dos cosas.* Comparada frame a frame con una build del bloque 8 (`git archive 1838619`, con una bomba puesta bajo la nave en el arnés): allí `Shake_cruz` daba ±30 px durante 11 frames y luego bajaba ~1 px cada 7 frames (±24 a los 50 frames); ahora sólo había un frame a ±80/±60. La sección 9 de esta auditoría (2026-11-12) describe además el blancazo de `oExplosionCruz` (`Effect_bombFlash`: las 4 paletas a medio camino del blanco 50 frames), que tenía `fffe0af` y la bomba de MonsterLite había perdido. Ahora la bomba hace las tres cosas: el `shake(1)` de MonsterLite (un frame a ±80/±60), la sacudida del `oExplosionCruz` (`Shake_bomb`, `inc/shake.h`: ±30 px y bajando, medido igual que en el bloque 8: 30 ×11 frames, 29, 28… hasta 24 a los 50) y el blancazo. Las sacudidas arrancan al acabar el hitstop de 5 frames (en él no corre nada); el blancazo se ve ya en el primero. Para que la sacudida pequeña de los disparos no la apague un frame cada vez que dispara el TWAY, si la del GML es más fuerte que la pequeña, manda ella (`src/shake.c`). La franja de columna repetida que se veía en el bloque 8 no vuelve: el fondo envuelto de la segunda entrega. Capturas: bloque 8 `~/blastem_20261122_210832.png`, `210833`, `210835`; ahora `~/blastem_20261122_211905.png`, `211906`, `211907`.
+
+**3. Las líneas holo, replanteadas para que cuesten lo mínimo.**
+
+*Perfil del caso peor* (`PORT_PROF=2`, con dos etapas añadidas en una copia: las líneas y lo del suelo; líneas de pantalla por frame, 313 por frame PAL), en HEAD (`cbe33ae`):
+
+| Etapa | Estrés | 10 holo, nave quieta | 10 holo, moviéndose |
+|---|---|---|---|
+| Montaje de la tabla de sprites (`Spr_flush`) | 88,8 (28 %) | 111,6 (36 %) | 109,0 (35 %) |
+| VBlank (`SYS_doVBlankProcess`: DMA, driver) | 66,8 (21 %) | 51,8 (17 %) | 59,5 (19 %) |
+| Gusanos | 56,1 (18 %) | 39,7 (13 %) | 28,4 (9 %) |
+| Proyectiles | 34,3 (11 %) | 90,8 (29 %) | 73,4 (23 %) |
+| Nave (disparo, apuntado) | 28,4 (9 %) | 35,5 (11 %) | 38,0 (12 %) |
+| Lo del suelo | 17,3 (6 %) | 20,7 (7 %) | 19,7 (6 %) |
+| Explosiones | 17,1 (5 %) | 18,0 (6 %) | 17,8 (6 %) |
+| Arañas | 11,5 (4 %) | 4,9 (2 %) | 5,8 (2 %) |
+| Líneas y haces (`Beam_update`) | 7,4 (2 %) | 17,9 (6 %) | 52,8 (17 %) |
+| HUD | 3,2 (1 %) | 5,8 (2 %) | 5,8 (2 %) |
+
+(El cronómetro de cada etapa se lleva también la interrupción de VBlank si cae dentro, así que las etapas pequeñas tienen ruido; las cifras grandes son fiables.)
+
+*Medidas exactas* (depurador de BlastEm, variable `cycle`, con las interrupciones cortadas, en una copia): rehacer una línea en C costaba **~6 300 ciclos** (unas 80 instrucciones por tramo; el compilador vectorizaba los bucles de las franjas con trucos SWAR de 32 bits). El 68000 va a unos 12-15 ciclos por instrucción: un frame da para unas 10 000-12 000 instrucciones.
+
+*El sistema nuevo* (`src/beam.c`, `src/beam_a.s`, `tools/ml_lineseg.py` → `res/lineseg_tab.h`):
+
+- **Tabla precalculada en ROM**: para cada distancia de la holo a la nave en celdas de 8 px (|dx| 0-320, |dy| 0-240: 1271 celdas), la lista de tramos ya colocados respecto a la holo, calculada en coma flotante fuera de la consola (sin el `recip` que truncaba y dejaba empalmes a 2 px). Es el cuadrante de abajo a la derecha; los otros tres salen volteando el sprite.
+- **Cada línea se ancla en su holo** (las holo no se mueven) y sólo se rehace cuando la nave pasa a otra celda respecto a ella: cada ~5 frames por línea a la velocidad de la nave, 1,8 líneas por frame con 10 holo. Sin retraso: siempre con la celda en que está la nave. El extremo de la nave se desvía como mucho ±4 px.
+- **Mirar si hay que rehacer una línea**: cuatro comparaciones con el rectángulo de posiciones de la nave en que su celda no cambia.
+- **Las posiciones de las holo** sólo se piden cuando alguna nace, se activa o muere (`Proj_holoStamp`, nuevo en `src/projectile.c`): recorrer el pool de 56 proyectiles cada frame costaba 4 vueltas con la nave quieta y 7 moviéndose.
+- **El bucle de los tramos en ensamblador** (`Beam_placeSegs`, ~50 instrucciones por tramo): rehacer una línea de 4 tramos baja de ~6 300 a **~5 200 ciclos** (~2 000 fijos y ~750 por tramo).
+- **Franjas por sprite**: cada sprite guarda su franja y cuántas toca, y al rehacer se resta sólo eso (antes, el rango entero de la línea, hasta 30 franjas).
+- **45° con paso (3,3)**: puntos sueltos en vez de la escalera continua.
+- **Al cambiar el número de holo** se rehacen todas en ese frame (ya no desaparecen todas y vuelven de 2 en 2).
+- Siguen: el grosor de la estela, ~3 px entre puntos (2,8-3,6; 4,2 a 45°), 40 tramos entre todas las líneas y 6 por franja de 8 px, y la cola fuera de la rotación por franjas llenas.
+
+*Resultado* (vueltas de 600 y bajas, 10 holo, con y sin líneas, la misma build salvo las líneas):
+
+| Build | Nave quieta | Nave moviéndose |
+|---|---|---|
+| HEAD (`cbe33ae`), sin líneas / con líneas | 366 / 354 (**−3,3 %**) | 373 / 332 (**−11 %**) |
+| Ahora, sin líneas / con líneas | 367 / 359 (**−2,2 %**) | 374 / 347 (**−7,2 %**) |
+
+`tools/measure.sh` (sin holo): 486/25 (antes 482/25). Con la nave quieta queda en el borde del ±2 %; moviéndose cuesta aún un 7 %: rehacer ~1,8 líneas por frame (~9 400 ciclos). Lo que queda por probar, todo con un precio que decide el usuario:
+
+- **Sin el tope de 6 sprites de línea por franja**: +4 vueltas moviéndose (medido). Desde la segunda entrega los sprites de las líneas van al final de la tabla y fuera de la rotación, así que si una franja se llena los que se pierden son ellos: el tope ya no protege a los sprites del juego.
+- **Celdas de 12 o 16 px**: la mitad de líneas rehechas por frame (estimado, −3 a −4 % moviéndose), con el extremo de la nave desviado hasta ±6-8 px.
+- **Toda `buildLine` en ensamblador** (los ~2 000 ciclos fijos): estimado, la mitad del coste que queda.
+
+*Capturas*: 1 holo en horizontal `~/blastem_20261122_215127.png` (4 tramos, como mucho 7 sprites en una línea de pantalla), 1 en diagonal `~/blastem_20261122_215147.png` (6 tramos, puntos sueltos), 3 con la nave moviéndose `~/blastem_20261122_215207.png` (19 tramos, 8 por línea), 10 con la arena llena `~/blastem_20261122_215228.png` (26 tramos, 75 entradas, 17 por línea). **Parpadeo con la arena llena**: con 10 holo y la arena llena la tabla del VDP va por 75-80 entradas y algunas líneas de pantalla pasan de 20 sprites; los de las líneas van los últimos, así que son ellos los que el VDP deja de pintar en esas líneas, y como los enemigos se mueven, cambia de frame a frame. No afecta a los sprites del juego. Quitarlo pide menos tramos (la decisión pendiente de la densidad con 10 holo).
+
+*ROM*: la tabla son **88 874 bytes** (1271 celdas: índice de 2 542 bytes, 62 B de filas y 14 378 tramos de 6 bytes). El contenido pasa de ~1,10 a ~1,19 MB y la ROM, que se rellena a múltiplos de 128 KB, de 1 179 648 (0x120000) a **1 310 720 bytes (0x140000)**; `rom_end` a 0x13FFFF. Se puede reducir:
+  - aprovechando la simetría respecto a la diagonal (la celda (x, y) es la (y, x) con las direcciones cambiadas), la mitad, ~44 KB, y la ROM volvería a 0x120000;
+  - guardando cada tramo como diferencia con el anterior en 8 bits, 3 bytes por tramo, ~45 KB;
+  - con celdas de 16 px, ~22 KB.
+
+  No se ha hecho: cuesta algo de CPU al leer (la simetría, un cambio de dirección por tramo) y la ROM sigue muy lejos de los 4 MB sin mapper.
+
+**4. Menores.**
+
+- `recip` (truncaba y dejaba empalmes a 2 px): ya no existe; las posiciones salen de la tabla, calculadas en coma flotante. Sólo queda `lineRecBlk` (32768 / tramos por línea) para repartir los tramos cuando no caben todos, que no afecta a la separación.
+- Comentarios de la música (Q21) en `src/audio.c` y `docs/MONSTERLITE_GAP.md` (tabla de diferencias y bloque 12), corregidos. El comentario duplicado de `src/beam.c` desapareció con la reescritura.
+- **El estallido de los rayos no suena si BOOM y EXPLOSIONS ocupan los dos canales** (prioridad 11 contra 13). Propuesta, sin hacer: mezclar fuera de la consola, en una sola muestra, lo que MonsterLite toca a la vez en cada evento (`bombaamarilla` + `rays` para los rayos; `Boom` + `bombaamarilla` + `xplosions` para la bomba), a prioridad de voz. Reproduce exactamente la superposición del original, cada evento ocupa un solo canal y no se puede perder el estallido. Coste: unos 60 KB de ROM.
+
+#### Plan para 50 fps siempre (decisión del usuario del 2026-11-22; sólo el plan)
+
+Objetivo: 600 vueltas de 600 en `PORT_STRESS` (hoy 486) y con 10 holo (hoy 359 quieta, 347 moviéndose). Un frame PAL son ~152 000 ciclos del 68000 y a 12-15 ciclos por instrucción da para ~10 000-12 000 instrucciones. El perfil de arriba (HEAD) suma ~330 líneas de pantalla por frame en estrés y ~400 con 10 holo, para 313 disponibles: hay que quitar ~20-25 % en estrés y ~40 % con 10 holo. Por partidas, de más a menos:
+
+| Partida (estrés / 10 holo) | Qué se puede hacer | Ganancia estimada | ¿Toca el juego? |
+|---|---|---|---|
+| Montaje de la tabla de sprites, 28 % / 36 % | Lista de ranuras vivas en vez de recorrer las ~240 aparcadas (44 ciclos cada una: ~10 000 ciclos); el chequeo de franjas llenas incremental en vez de recorrer la tabla; sprites de varias piezas (cabezas, explosiones) precompuestos | 10-15 % | No |
+| VBlank (DMA y driver), 17-21 % | Medir dentro: cola de DMA (tabla de sprites, frames de VStream de arañas, cabezas y nave), paletas; repartir las subidas de VStream entre frames (ya se hace con las arañas); que el SAT sólo suba las entradas usadas | 3-6 % | No |
+| Gusanos, 9-18 % | Bucle de colocación de eslabones en ensamblador (es el más repetido después del montador); migas con aritmética de 16 bits | 5-8 % | No |
+| Proyectiles, 11 % / 23-29 % | Rejilla de enemigos por celdas de 32 px para las colisiones (cada bala mira 1-4 celdas en vez de 8 arañas y 3 cabezas); las balas de las holo con la misma rejilla; bucle en ensamblador | 5 % / 12-15 % | No |
+| Nave, 9-12 % | El enemigo más cercano con la rejilla; ángulo por tabla | 3-4 % | No |
+| Lo del suelo, 6 % | Animar y caducar con contadores por grupo en vez de cada objeto cada frame | 2-3 % | No |
+| Explosiones, 5-6 % | Tabla de animación precalculada, sin `random()` por frame | 2 % | No |
+| Líneas holo, 2 % / hasta 7 % | Las opciones de la cuarta entrega (sin tope por franja, celdas de 12-16 px, `buildLine` entera en ensamblador) | 2-4 % con 10 holo | Las celdas más grandes, sí (aspecto) |
+| Sonido (el Z80 leyendo muestras por el bus del 68000) | Muestras de impacto y disparo a media velocidad (6,65 kHz: la mitad de lecturas) | 2-4 % (medido: el sonido cuesta ~22 vueltas en estrés) | Sí: el sonido pierde agudos |
+| Repartir trabajo entre frames | IA de arañas y gusanos lejos de la nave cada 2 frames | 5-10 % | Sí: MonsterLite mueve todo cada `FixedUpdate` |
+
+Sin tocar el juego (las filas con "No") se llega, sumando las estimaciones bajas, a ~30 % en estrés, suficiente para 600 de 600, y a ~35-40 % con 10 holo, en el límite. Si no basta, lo siguiente tocaría el juego (sonido a media velocidad, IA cada 2 frames) o los topes (no se cambian sin el usuario). Orden propuesto: montador de sprites, rejilla de colisiones, gusanos en ensamblador, y medir después de cada paso con `tools/measure.sh` y el perfil.
 
 #### Tercera entrega (2026-11-22): las líneas holo sin coste, y la explosión de la muerte
 
@@ -3173,9 +3394,18 @@ Las cinco son módulos de MilkyTracker de 8 canales (5 en uso), un patrón de ve
 
 | Fecha | Prueba | Resultado |
 |---|---|---|
+| 2026-11-23 | Bloque 12, cuarta entrega: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1`, `tools/check_header.py`, `tools/measure.sh`; arranque en BlastEm hasta la partida | ✅ sin avisos; ROM 1 310 720 bytes, `rom_end` 0x13FFFF; 486/25; `nextTile` 1434 de 1440; pool 316 de 320 (`Spr_check` pasa); `.data` + `.bss` 27 044 bytes; `save.sram` sin tocar |
+| 2026-11-23 | Líneas holo: desfase con 1 a 10 holo y la nave moviéndose 60 frames (celda de cada línea en RAM frente a la que le toca) | ✅ 0 frames de 1 a 9 holo; con 10, 2 lecturas de 1 frame (frames desbordados) |
+| 2026-11-22 | Líneas holo: banco de `buildLine` con las interrupciones cortadas (`cycle` del depurador), perfil por etapas, variantes con y sin líneas, quieta y moviéndose | C: ~6 300 ciclos por línea; ensamblador: ~5 200 (~2 000 + ~750 por tramo); −2,2 % quieta y −7,2 % moviéndose (HEAD: −3,3 % y −11 %) |
+| 2026-11-22 | Bomba frente al bloque 8 (`g_shakeX/Y` frame a frame y capturas) | ✅ ±30 px decayendo igual que en el bloque 8, con un primer frame a ±80/±60 y el blancazo (el de `fffe0af`; corregido en la quinta entrega) |
 | 2026-11-22 | Bloque 12, tercera entrega: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1`, `tools/check_header.py`, `tools/measure.sh` | ✅ sin avisos; ROM 1 179 648 bytes; 482/25; `nextTile` 1434 de 1440; pool 316 de 320 |
 | 2026-11-22 | Líneas holo: perfil (calcular sin enseñar, contar recálculos y sus motivos en RAM) y medidas con la nave quieta y moviéndose, con y sin líneas | ✅ 354/28 frente a 362/28 quieta (antes 308/24); 332/24 frente a 366/26 moviéndose (antes 317/23) |
 | 2026-11-22 | Muerte frame a frame contra una build de HEAD (`deathTimer`, `deathWhite`, `g_shakeX`, capturas) | Destello blanco igual en las dos (11 frames de fondo blanco); en HEAD `g_shakeX` siempre 0 |
+| 2026-11-26 | Quinta entrega: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1` (con `touch` antes de cada una), `tools/check_header.py`, `tools/measure.sh`, arranque en BlastEm | ✅ sin avisos; `rom_end` 0x15FFFF; 540/25; `sprPoolCount` 276 de 288; VRAM 1434 de 1440 |
+| 2026-11-26 | Líneas holo: imagen y lista del VDP contra un modelo independiente (`out/bench/check_lines.py`, 1, 3, 6 y 10 holo, que mueren y que no, quieta y moviéndose, 270 paradas) | ✅ 0 diferencias |
+| 2026-11-26 | Líneas holo: ciclos de `Beam_linesFlush` (150 frames) y vueltas con y sin líneas (`out/bench/bench.sh`, 6 partidas por caso) | Ver la tabla de la quinta entrega: −1,2 % quieta con holo que no mueren, −4,1 % con holo que mueren; CPU 0,6-1,1 % |
+| 2026-11-26 | Bomba con la arena llena (`g_shakeX` frame a frame) | ✅ ±79 un frame, ±30 once, y bajando hasta 0 en ~210 frames sin cortes |
+| 2026-11-26 | Mezclas: muestras que recibe el driver alrededor de una bomba (`out/bench/pcm.py`) | ✅ `mlBombMix` una vez, en el canal 3; impactos en el 2 |
 | 2026-11-21 | Bloque 12: `make`, `make GFXDEBUG=1`, `PORT_STRESS=1` (y `PORT_STRESS_HOLO`), `tools/check_header.py` | ✅ sin avisos; ROM 1 179 648 bytes, `rom_end` 0x11FFFF |
 | 2026-11-21 | Bloque 12: `tools/measure.sh` y variantes en copias del scratchpad (sin hitstop, sin estela, sin sonido, política de canales de antes, 10 holo con y sin líneas) | ✅ 481/25 (antes 505/34); 10 holo 308/24; desglose en la sección del bloque 12 |
 | 2026-11-21 | Hitstop por RAM (ROM de estrés, `hitstopMs`, bajas y `now` de la estela frame a frame) | ✅ baja con bala: 1 frame (30 → 10) y la siguiente 2 (40 → 20 → 0); baja de metralla: 0 |

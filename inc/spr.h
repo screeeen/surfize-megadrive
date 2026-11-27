@@ -3,6 +3,7 @@
 
 #include <genesis.h>
 #include "shake.h"
+#include "hwlimits.h"
 
 // ===========================================================================
 // Motor de sprites propio
@@ -34,11 +35,13 @@
 
 // 80 es el tope del VDP; estas son ranuras lógicas, de las que se pintan las
 // 80 primeras que caigan dentro de la pantalla.
-// 316 repartidas desde el bloque 12 (la estela se lleva 13 y las líneas a
-// las holo pasan de 30 puntos a 40). Eran 256 y se pedían 293: los últimos 37 (los puntos de los rayos y parte de los de las
-// líneas a las holo) caían en el sumidero y no se dibujaban. Spr_check para
-// el juego al arrancar si vuelve a pasar.
-#define MDSPR_POOL      320
+// Eran 256 y se pedían 293: los últimos 37 (los puntos de los rayos y parte
+// de los de las líneas a las holo) caían en el sumidero y no se dibujaban.
+// En el bloque 12 llegaron a 316 (la estela se lleva 13 y las líneas a las
+// holo pasaron de 30 puntos a 40); desde su quinta entrega las líneas ya no
+// van en el pool (tienen su trozo de la tabla del VDP, ver src/beam.c) y
+// quedan 276. Spr_check para el juego al arrancar si se pasa.
+#define MDSPR_POOL      288
 
 // OJO AL ORDEN DE LOS CAMPOS: los ocho primeros bytes son, byte a byte, una
 // entrada de la tabla de sprites del VDP (VDPSprite: y, size_link, attribut,
@@ -62,7 +65,7 @@ typedef struct
 
 // Fuera de la pantalla por los dos lados y más allá del sprite más grande
 // (64 px), para que el descarte lo tire siempre.
-#define MDSPR_PARKED    (-128)
+#define MDSPR_PARKED    SPR_PARKED_Y
 
 void Spr_init(void);
 
@@ -75,12 +78,16 @@ void Spr_flush(void);
 
 // Cuántas entradas de hardware se usaron en el último montaje, y cuántas
 // ranuras hay repartidas: para el presupuesto.
+// Desde la quinta entrega del bloque 12, la cuenta incluye las entradas de
+// las líneas a las holo, que no salen del pool (ver Beam_linesFlush);
+// Spr_satGame, sólo las del juego (las de vdpSpriteCache).
 u16 Spr_satUsed(void);
+u16 Spr_satGame(void);
 u16 Spr_allocated(void);
 
 // La COLA del pool: un tramo de ranuras, al final de todo, que casi siempre
-// está entero aparcado (los puntos de las líneas a las holo y de los rayos,
-// 40 + 33). Recorrer una ranura aparcada cuesta 44 ciclos (ver la auditoría,
+// está entero aparcado (los 33 puntos de los rayos; hasta la cuarta entrega
+// del bloque 12 también los 40 de las líneas a las holo). Recorrer una ranura aparcada cuesta 44 ciclos (ver la auditoría,
 // "El montador de sprites en ensamblador"), así que el montador se salta la
 // cola más allá de lo que su dueño diga que puede estar a la vista.
 // Spr_tailBegin y Spr_tailEnd rodean su reparto; Spr_tailVisible lo llama el

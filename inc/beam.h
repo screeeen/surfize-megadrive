@@ -55,14 +55,17 @@
 // Las líneas a las holo (decisión del usuario del 2026-11-21): el grosor de
 // la estela y puntos muy juntos. Tramos de varios puntos de 2x2 a ~3 px, ya
 // dibujados en 7 direcciones (tools/ml_lineseg.py), un sprite por tramo: una
-// línea de 150 px son de 5 (horizontal) a 10 sprites. Dos topes, medidos en
-// sprites de hardware (ver src/beam.c, updateLines):
-//   - BEAM_LINE_SPRITES tramos entre todas las líneas, a partes iguales;
-//   - BEAM_LINE_BAND sprites de línea por franja de 8 líneas de pantalla: el
-//     VDP pinta 20 sprites por línea y el montador rota la tabla (y hace
-//     parpadear el juego) si una franja pasa de 20 (src/spr.c).
-#define BEAM_LINE_SPRITES 40    // tramos a la vez, entre todas las líneas
-#define BEAM_LINE_BAND    6     // sprites de línea por franja de 8 px
+// línea de 150 px son de 5 (horizontal) a 10 sprites. BEAM_LINE_SPRITES
+// tramos entre todas las líneas, a partes iguales, y nunca más de los que
+// deje libres el juego en la tabla del VDP (ver Beam_linesFlush).
+//
+// Hasta la cuarta entrega había además un tope de 6 sprites de línea por
+// franja de 8 líneas de pantalla, para que el montador no rotara la tabla
+// por su culpa. Desde la quinta (2026-11-26) las líneas van siempre detrás
+// de todo el juego en la lista del VDP y no cuentan para la rotación, así
+// que si una línea de pantalla se llena, lo que se pierde es de ellas: el
+// tope ya no protegía nada (opción que dio el usuario).
+#define BEAM_LINE_SPRITES LINE_SAT_SLOTS    // tramos a la vez, entre todas las líneas (inc/hwlimits.h)
 
 void Beam_init(void);
 
@@ -76,5 +79,19 @@ void Beam_initDots(void);
 void Beam_update(u16 weaponIndex, u16 ammo, fix16 px, fix16 py, fix16 angle);
 
 void Beam_clear(void);
+
+// Las líneas a las holo, montadas en su trozo de la tabla del VDP (las
+// entradas 40 a 79 de vdpSpriteCache). Lo llama Spr_flush después de montar
+// las nGame entradas del juego; devuelve cuántas de las líneas van a la
+// vista (enganchadas detrás de las del juego, desde la 79 hacia abajo) y en
+// *satLen cuántas entradas de vdpSpriteCache hay que subir por DMA.
+u16 Beam_linesFlush(u16 nGame, u16 *satLen);
+
+// La tabla de este frame no ha llegado a la cola de DMA (llena).
+void Beam_linesDmaLost(void);
+
+// Las entradas de las líneas que fueron a la vista en el último Spr_flush
+// (para el depurador de gráficos): count entradas seguidas.
+const VDPSprite *Beam_lineEntries(u16 *count);
 
 #endif

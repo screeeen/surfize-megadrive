@@ -87,7 +87,13 @@ int main(bool hardReset)
     // Con PORT_DEBUG_BG el fondo arranca en el normal y se va cambiando con
     // el botón C durante la partida (ver Game_update). No entra en la ROM que
     // se distribuye.
+#if (PORT_STRESS || PORT_BENCH || PORT_PROF)
     PAL_setColor(0, ROOM_BG_COLOR);
+#endif
+    // Sin el arnés, el color 0 se queda en negro hasta el fundido del menú:
+    // con la pantalla apagada (Logo_show) el VDP enseña ese color, y así no
+    // se ve el fondo mientras se prepara el menú. El fundido lo lleva a
+    // ROOM_BG_COLOR (ver más abajo).
 
     // Todos los sprites comparten la paleta sacada del arte original.
     PAL_setPalette(PAL1, spritePalette, DMA);
@@ -95,6 +101,25 @@ int main(bool hardReset)
     Hole_initGraphics();
     Bg_init();
     Game_init();
+
+#if !(PORT_STRESS || PORT_BENCH || PORT_PROF)
+    // Del negro en que acaba el logo al menú, fundiendo en vez de cortar
+    // (decisión del usuario del 2026-11-27). La pantalla sigue apagada desde
+    // Logo_show: se vacía la cola de DMA para que la CRAM tenga ya todas las
+    // paletas del menú, se guardan, se pone todo en negro, se enciende y el
+    // fundido corre solo en los VBlank mientras el bucle pinta el menú. El arnés de medida no lo hace, para
+    // que sus frames sigan siendo los mismos.
+    {
+        u16 all[64];
+
+        SYS_doVBlankProcess();
+        PAL_getColors(0, all, 64);
+        all[0] = ROOM_BG_COLOR;
+        PAL_setColors(0, palette_black, 64, CPU);   // apunta a 64 negros
+        VDP_setEnable(TRUE);
+        PAL_fadeInAll(all, MENU_FADE_IN_FRAMES, TRUE);
+    }
+#endif
 
     while (TRUE)
     {

@@ -430,7 +430,7 @@ Estado: **falta** (no existe en el port), **distinto** (existe con otro comporta
 | Cámara lenta de la muerte | ×0,2 durante 1 s | fogonazo `oMuerte` (GML) | distinto | ralentizar = actualizar 1 de cada 5 frames |
 | Sacudidas | pequeña ±4 px por disparo; grande con zoom y ±80/±60 px | sacudida del GML por scroll | distinto | el zoom no existe en el VDP (Q20) |
 | Fondo | color plano que deriva con el nivel; rojo en game over | la imagen de ruinas (Q16); el fogonazo rojo del game over desde el bloque 5; **sin color por nivel**: `setCameraLevelColor` no se porta (Q16, bloque 9) | divergencia deliberada (Q16) | — |
-| Música | 5 pistas `.xm` al azar | `musMenu` del GML | distinto | XM → XGM, coste de ROM (Q21) |
+| Música | 5 pistas `.xm` al azar | `musMenu` del GML en el menú y el game over; **en partida, ninguna** | distinto | no se porta: Q21 revocada por el usuario (2026-11-21) |
 | Voces y efectos | lista de §2.12 | 20 sonidos del GML | distinto | WAV a 13300 Hz por XGM2 |
 
 ---
@@ -565,7 +565,7 @@ Cada bloque dice qué preguntas de §6 tiene que tener respondidas antes de empe
 
 - **Bloqueado por**: Q17 (hitstop por baja), Q20, Q21.
 - **Hecho el 2026-11-21, antes que el 11 (decisión del usuario), sin música**: Q21 revocada el mismo día, en partida no hay música (MonsterLite sí tiene). Incluye además las líneas a las naves holo en tramos de puntos de 2×2 (con el fondo bajado a 504 tiles), la retirada de la muerte del GML y de nueve PCM del GML sin uso (decisiones del usuario), y el arreglo del pool de sprites, que estaba lleno.
-- **Incluye**: hitstop de 30 ms por baja con bala (Q17), cámara lenta de la muerte, sacudidas de MonsterLite (Q20), estela de la nave (13 f), voces nuevas ("ARENA", "AWESOME", "EXPLOSIONS", "RAYS", "CARALLUDO"…), "ding" del contador con la regla de Q15, música (Q21).
+- **Incluye**: hitstop de 30 ms por baja con bala (Q17), cámara lenta de la muerte, sacudidas de MonsterLite (Q20), estela de la nave (13 f), voces nuevas ("ARENA", "AWESOME", "EXPLOSIONS", "RAYS", "CARALLUDO"…), "ding" del contador con la regla de Q15. La música (Q21) ya no: revocada por el usuario el 2026-11-21.
 - **Archivos**: `src/shake.c`, `src/effect.c`, `src/audio.c`, `res/resources.res`, `res/sound/`.
 - **Verificación**: escuchar en BlastEm; tamaño del ROM; `tools/measure.sh`.
 

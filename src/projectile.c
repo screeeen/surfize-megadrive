@@ -118,6 +118,12 @@ static u16   triTimer[MAX_PROJECTILES];
 // Naves holo en el pool: casi siempre ninguna, y así lo que las busca no
 // recorre el pool entero (el caso peor va al borde del frame).
 static u16 holoN;
+// Cambia cada vez que una holo nace, se activa o muere: las líneas a las holo
+// (src/beam.c) sólo vuelven a pedir posiciones entonces, porque las holo no
+// se mueven.
+static u16 holoStamp;
+
+u16 Proj_holoStamp(void) { return holoStamp; }
 // Reparte entre frames el trabajo de las holo (ver updateHolo).
 static u16 holoTick;
 // Bajas por bala (fina, gorda y la de las holo) desde la última vez que se
@@ -134,7 +140,7 @@ u16 Proj_takeBulletKills(void)
 
 static void hide(u16 i)
 {
-    if (projs[i].type == PROJ_TRI) holoN--;
+    if (projs[i].type == PROJ_TRI) { holoN--; holoStamp++; }
     projs[i].type = PROJ_NONE;
     sprHide(projs[i].sprite);
 }
@@ -180,7 +186,7 @@ static s16 spawn(u8 type, fix16 x, fix16 y, fix16 angle, fix16 speed, u16 life)
                     (((type == PROJ_BOMB) || (type == PROJ_RAY) ||
                       (type == PROJ_OPTION) || (type == PROJ_CIRC))
                          ? 0 : Entity_angleFrame8(angle));
-    if (type == PROJ_TRI) { triTimer[i] = ML_HOLO_FIRST_F; holoN++; }
+    if (type == PROJ_TRI) { triTimer[i] = ML_HOLO_FIRST_F; holoN++; holoStamp++; }
 
     sprAnim(projs[i].sprite, projs[i].anim);
     sprTile(projs[i].sprite, projTile[projs[i].anim]);
@@ -232,6 +238,7 @@ void Proj_initAll(void)
     beamLife = 0;
     pivotAlive = FALSE;
     holoN = 0;
+    holoStamp++;
 }
 
 void Proj_setPlayer(fix16 px, fix16 py, fix16 angle, u16 pad, bool hasTarget, fix16 tx, fix16 ty)
@@ -358,6 +365,7 @@ bool Proj_holoTouch(s16 px, s16 py)
         if ((u16)((dx * dx) + (dy * dy)) >= ML_HOLO_TOUCH_R2) continue;
 
         projs[i].released = 1;
+        holoStamp++;
         any = TRUE;
     }
 

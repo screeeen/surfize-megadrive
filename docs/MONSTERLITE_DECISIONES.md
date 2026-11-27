@@ -108,3 +108,31 @@ Respuestas a las preguntas abiertas de `docs/MONSTERLITE_GAP.md` §6. Mandan sob
 |---|---|
 | Coste de las líneas a las naves holo | **Las líneas no deben notarse en el rendimiento**: con 10 holo, la diferencia con y sin líneas, dentro del ruido (±2 %), y el caso normal sin empeorar. Implementado guardando lo hecho de un frame al siguiente y rehaciendo 2 líneas por frame cuando se mueve la nave (`docs/PORT_AUDIT_GML.md`, bloque 12, tercera entrega): −2,2 % con la nave quieta (el arnés de medida) y −9 % moviéndose. Se mantienen el grosor de la estela, los puntos a ~3 px y los topes por línea de pantalla. |
 | Explosión de la muerte | **El usuario la prefería como antes del bloque 12** (con su destello blanco y la sacudida). Comparada frame a frame con HEAD, el destello blanco es igual y en HEAD no había sacudida (se cortaba en el mismo frame): no se ha cambiado nada. **Pendiente de que el usuario elija**: dejarla así, poner la sacudida del GML a cámara lenta, o volver a la muerte de HEAD sin cámara lenta (`docs/PORT_AUDIT_GML.md`, bloque 12, tercera entrega). |
+
+## Decisiones del 2026-11-22 (bloque 12, cuarta entrega)
+
+| Tema | Decisión |
+|---|---|
+| La bomba | **"Blancazo en pantalla y super screenshake"**, como antes del bloque 12. Vuelven el blancazo del `oExplosionCruz` del GML (la paleta a medio camino del blanco 50 frames; el de `fffe0af`, que el bloque 8 había quitado) y su sacudida de 30 px que se apaga en ~4 s (la del bloque 8, `1838619`), sumados al `shake(1)` de MonsterLite. La muerte se queda como está. (Corregido el 2026-11-26: decía "como en el bloque 8", pero el bloque 8 sólo tenía la sacudida.) |
+| Líneas a las naves holo | **"Optimízalo mucho, mucho. No quiero que bajen los FPS ni la velocidad del juego en ningún momento."** Con 10 holo, la diferencia con y sin líneas, dentro del ruido, con la nave quieta y moviéndose, y sin retraso visible. Resultado de la cuarta entrega: −2,2 % quieta y −7,2 % moviéndose (`docs/PORT_AUDIT_GML.md`, bloque 12); quedan opciones que tocan el aspecto, para que el usuario elija. |
+| Rendimiento general | **50 fps siempre**, también en el caso peor (`PORT_STRESS`) y con 10 holo. Para la entrega siguiente; en la cuarta, sólo el plan. Sin cambiar los topes del juego sin su permiso. |
+
+## Decisiones del 2026-11-26 (bloque 12, quinta entrega)
+
+| Tema | Decisión |
+|---|---|
+| Líneas a las naves holo | **Menos del 1 % en todos los casos**, también con la nave moviéndose, con las holo en posiciones irregulares y con holo que no mueren, **sin cambio visual**. Optimización máxima; entre las opciones, todo `buildLine` en ensamblador, quitar el tope de 6 sprites por franja y no calcular ni colocar las líneas que no van a caber en la tabla del VDP, y que las líneas nunca echen de la tabla a los sprites del juego. Resultado en `docs/PORT_AUDIT_GML.md`, bloque 12, quinta entrega. |
+| ROM | **Primero la velocidad.** La tabla de tramos sólo se reduce (simetría de la diagonal, deltas) si no cuesta ni un ciclo por frame; si no, se queda: queda en 0x15FFFF. |
+| Muestras mezcladas por evento | **Aprobadas**: rayos (`bombaamarilla` + `rays`) y bomba (`Boom` + `bombaamarilla` + `xplosions`), una muestra cada uno. |
+| 50 fps | **Aprobado el plan**: el juego siempre a 50 fps, también en el estrés con 10 holo (600/600), en el orden propuesto (montador de sprites, rejilla de colisiones, gusanos…), midiendo tras cada paso y **sin tocar el juego**. El sonido a 6,65 kHz y la IA lejana cada 2 frames, no sin preguntar. Sin cambiar los topes de enemigos. |
+| La sacudida de la bomba | (Hallazgo del verificador.) La "super screenshake" no puede cortarla una sacudida más floja: **manda la más fuerte hasta que se apague**. |
+
+## Decisiones del 2026-11-27 (bloque 12, sexta entrega)
+
+| Tema | Decisión |
+|---|---|
+| Líneas a las holo | Sí a subir sólo las coordenadas (DMA de paso 8, o lo más barato), sin cambio visual; el objetivo sigue siendo <1 % en vueltas, medido con un arnés determinista. |
+| Sacudida de la bomba | **La mitad de larga** (por ejemplo, el doble de desvanecimiento), con el mismo pico inicial y el blancazo. |
+| 50 fps | Seguir con los pasos 2 a 5 del plan, con las mismas reglas (bajas iguales a HEAD, sin tocar topes, sin sonido a 6,65 kHz ni IA cada 2 frames sin preguntar). |
+| Arquitectura | **"Piensa siempre en una arquitectura que facilite un futuro port"**: lógica separada del hardware, cada rutina en ensamblador con su versión en C (`PORT_NO_ASM`), generadores documentados, topes del hardware con nombre y en un sitio. Sin refactor grande ahora: aplicarlo a lo que se toque y documentar lo que lo rompe (`docs/PORT_AUDIT_GML.md`, "Arquitectura para portar"). |
+| Uso semanal | Pausa al 60 %: entregar por pasos que compilen y estén documentados. |

@@ -6,8 +6,9 @@
 //
 // MonsterLite lo toca todo por un solo AudioSource con PlayOneShot, que
 // superpone tantas voces como haga falta. XGM2 tiene 3 canales PCM: el 1 es
-// de la música (la del menú, y la de partida cuando se porte, Q21) y los
-// efectos y las voces se reparten el 2 y el 3 (pickChannel):
+// de la música del menú y del game over (en partida no hay música: Q21
+// revocada por el usuario el 2026-11-21) y los efectos y las voces se
+// reparten el 2 y el 3 (pickChannel):
 //
 //   1. el primer canal libre, en el orden 3, 2;
 //   2. si no hay ninguno y el nuevo es de lo que se repite (disparo o
@@ -24,8 +25,9 @@
 //
 // No se usa SOUND_PCM_CH_AUTO del driver: mira el canal 3 antes que el 2
 // aunque el 2 tenga algo menos importante, así que con la bomba (cuatro
-// sonidos en el mismo frame) la voz "EXPLOSIONS" cortaba a "BOOM" teniendo
-// el estallido, de menos prioridad, en el otro canal. Y el estado del driver
+// sonidos en el mismo frame, hasta la quinta entrega: ahora es una sola
+// muestra) la voz "EXPLOSIONS" cortaba a "BOOM" teniendo el estallido, de
+// menos prioridad, en el otro canal. Y el estado del driver
 // no ve los sonidos pedidos en el mismo frame (el Z80 aún no los ha
 // arrancado): dos en el mismo frame iban al mismo canal. Aquí cada canal
 // guarda en RAM cuándo acaba lo suyo (la longitud a 266 muestras por frame) y
@@ -38,9 +40,11 @@
 // el ding), y lo que se repite se reparte los dos canales.
 //
 //   15  música del menú (canal 1): nada la corta
-//   13  voces: ARENA, EXPLOSIONS, RAYS, AWESOME, CARALLUDO, BOOM, repetea,
-//       las de arma de la tienda
-//   11  estallido de la bomba y los rayos (bombaAmarilla)
+//   13  voces: ARENA, AWESOME, CARALLUDO, repetea, las de arma de la
+//       tienda, y las mezclas de la bomba (BOOM + estallido + EXPLOSIONS) y
+//       de los rayos (estallido + RAYS), que desde la quinta entrega van
+//       cada una en una sola muestra y un solo canal (antes, con tres voces
+//       en dos canales, el estallido de los rayos se quedaba sin canal)
 //    9  recoger paquete o moneda, botones
 //    8  el ding de la cuenta (uno por frame)
 //    5  disparos (grupo de los disparos) y explosiones de enemigo (bombaXPL;
@@ -56,7 +60,6 @@
 // ---------------------------------------------------------------------------
 #define PRIO_MUSIC      15
 #define PRIO_VOICE      13
-#define PRIO_BLAST      11
 #define PRIO_PICKUP     9
 #define PRIO_SHOT       5
 #define PRIO_XPL        5
@@ -101,15 +104,14 @@ static const Sample samples[SFX_COUNT] =
     [SFX_ML_TWAY]      = SG(mlTway,        PRIO_SHOT, GRP_SHOT),
     [SFX_ML_CIRCULAR]  = SG(mlCircular,    PRIO_SHOT, GRP_SHOT),
     [SFX_ML_XPL]       = SG(mlXpl,         PRIO_XPL, GRP_XPL),
-    [SFX_ML_BOMBA_AM]  = S(mlBombaAm,     PRIO_BLAST),
     [SFX_ML_POWUP]     = S(mlPowUp,       PRIO_PICKUP),
     [SFX_ML_REPETEA]   = S(mlRepetea,     PRIO_VOICE),
-    // boomSpeechSnd es Boom.wav, que es el boomSnd del GML (la misma toma:
-    // correlación 0,89 a 13300 Hz y la misma duración): no se duplica.
-    [SFX_ML_BOOM]      = S(sfxBoom,       PRIO_VOICE),
     [SFX_ML_ARENA]     = S(mlArena,       PRIO_VOICE),
-    [SFX_ML_XPLOSIONS] = S(mlXplosions,   PRIO_VOICE),
-    [SFX_ML_RAYS]      = S(mlRays,        PRIO_VOICE),
+    // La bomba y los rayos, cada uno en una sola muestra (las voces BOOM y
+    // EXPLOSIONS o RAYS con el estallido de bombaAmarilla): con la prioridad
+    // de las voces, que es lo que llevan dentro.
+    [SFX_ML_BOMB_MIX]  = S(mlBombMix,     PRIO_VOICE),
+    [SFX_ML_RAYS_MIX]  = S(mlRaysMix,     PRIO_VOICE),
     [SFX_ML_AWESOME]   = S(mlAwesome,     PRIO_VOICE),
     [SFX_ML_CARALLUDO] = S(mlCaralludo,   PRIO_VOICE),
     [SFX_ML_DING]      = S(mlDing,        PRIO_DING),

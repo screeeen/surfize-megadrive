@@ -22,6 +22,9 @@ El tono aleatorio entre 0,9 y 1,1 que SoundManager pone a casi todo no se
 puede reproducir (XGM2 no cambia el tono de una muestra): se convierten a
 tono 1. Ver docs/PORT_AUDIT_GML.md, bloque 12.
 
+Desde la quinta entrega del bloque 12, además, las mezclas de la bomba y
+los rayos (MIXES, más abajo).
+
 Uso:  python3 tools/ml2md_audio.py
 """
 
@@ -44,17 +47,29 @@ SOUNDS = [
     ("mlTway",       "3way.wav",              1, "triBulletSnd"),
     ("mlCircular",   "retroUFO.wav",          1, "circularBulletSnd"),
     ("mlXpl",        "explosionDePolvo2.wav", 1, "bombaXPLSnd"),
-    ("mlBombaAm",    "bombaamarilla.wav",     1, "bombaAmarillaXPLSnd"),
     ("mlPowUp",      "powUp3Wah_d.wav",       1, "pillaPaqueteGameSnd"),
     ("mlRepetea",    "repeteaSpeech.wav",     1, "repeteaSpeechSnd"),
     ("mlArena",      "woman voice_short.wav", 1, "arenaWomanSnd"),
-    ("mlXplosions",  "xplosions.wav",         1, "explosionWomanSnd"),
-    ("mlRays",       "rays.wav",              1, "raysWomanSnd"),
     ("mlAwesome",    "awe3.wav",              1, "awesomeWomanSnd"),
     ("mlCaralludo",  "Fafarre.aiff",          2, "caralludoSpeechSnd (pitch 2)"),
     ("mlDing",       "ding.wav",              3, "dingSnd (pitch 3)"),
     ("mlBtnShort",   "buttonShort.wav",       1, "buttonShortSnd"),
     ("mlBtnLong",    "buttonLong.wav",        1, "buttonLongSnd"),
+]
+
+# Las MEZCLAS (decisión del usuario del 2026-11-26): lo que MonsterLite toca
+# a la vez con PlayOneShot en un mismo evento, sumado aquí en una sola
+# muestra para que ocupe un solo canal de XGM2 (con dos canales para efectos,
+# la bomba con tres voces separadas dejaba sin sitio al resto). Todas
+# arrancan en el mismo frame en MonsterLite, así que se suman desde la
+# muestra 0. Se suman en 16 bits y se recorta lo que se pase, como haría el
+# mezclador de Unity sin limitador.
+#   bomba  (S/playerMovement.cs:199-210): playBoomClip (Boom.wav,
+#          boomSpeechSnd), bombaAmarillaXPLSnd y explosionWomanSnd
+#   rayos  (S/playerMovement.cs:212-220): bombaAmarillaXPLSnd y raysWomanSnd
+MIXES = [
+    ("mlBombMix", ["Boom.wav", "bombaamarilla.wav", "xplosions.wav"], "bomba"),
+    ("mlRaysMix", ["bombaamarilla.wav", "rays.wav"], "rayos"),
 ]
 
 
@@ -117,6 +132,34 @@ def main():
             total += len(pcm)
             print(f"  {res + '.wav':18s} {len(pcm) / 1024:6.1f} KB  "
                   f"{len(pcm) / RATE:5.2f}s  {name} ({field})")
+
+        for res, names, what in MIXES:
+            acc = []
+            for name in names:
+                a = os.path.join(tmp, "a.wav")
+                afconvert(os.path.join(ML, name), a, f"LEI16@{RATE}")
+                w = wave.open(a)
+                raw = w.readframes(w.getnframes())
+                w.close()
+                v = struct.unpack("<%dh" % (len(raw) // 2), raw)
+                if len(v) > len(acc):
+                    acc += [0] * (len(v) - len(acc))
+                for i, x in enumerate(v):
+                    acc[i] += x
+            clipped = sum(1 for x in acc if (x > 32767) or (x < -32768))
+            pcm = bytearray()
+            for x in acc:
+                x = max(-32768, min(32767, x))
+                pcm.append(max(0, min(255, (x + 32768 + 128) >> 8)))
+            end = len(pcm)
+            while end > 1 and abs(pcm[end - 1] - 128) <= 1:
+                end -= 1
+            pcm = bytes(pcm[:end])
+            write_wav(os.path.join(OUT, res + ".wav"), pcm, RATE)
+            total += len(pcm)
+            print(f"  {res + '.wav':18s} {len(pcm) / 1024:6.1f} KB  "
+                  f"{len(pcm) / RATE:5.2f}s  {what}: {' + '.join(names)}"
+                  f" ({100.0 * clipped / max(1, len(acc)):.1f} % recortado)")
 
     print(f"\n  total {total / 1024:.0f} KB de PCM")
 

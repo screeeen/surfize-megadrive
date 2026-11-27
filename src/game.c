@@ -1081,7 +1081,6 @@ static void playUpdate(u16 pad)
 #if !PORT_NO_HITSTOP
                     hitstopMs += ML_POW_FREEZE_MS;
 #endif
-                    Audio_sfx(SFX_ML_BOOM);
                     Effect_spawnQuiet(got.x, got.y);
                     // Bloque 10: usar una bomba, y 10 bajas con la misma.
                     Achieve_unlock(ACH_USE_BOMB);
@@ -1091,9 +1090,19 @@ static void playUpdate(u16 pad)
                         if (n >= ACH_BOMB_KILLS) Achieve_unlock(ACH_BOMB_10);
                         addKills(n);
                     }
+                    // shake(1) de MonsterLite (±80/±60 px un frame) y, por
+                    // debajo, la del oExplosionCruz del GML con su blancazo
+                    // (la paleta a medio camino del blanco 50 frames): la
+                    // sacudida del bloque 8 y el blancazo de fffe0af, que el
+                    // usuario quiere de vuelta (2026-11-22). Las dos sacudidas arrancan al acabar el
+                    // hitstop (en él no corre nada); el blancazo se ve ya.
                     Shake_big(ML_SHAKE_BOMB_F);
-                    Audio_sfx(SFX_ML_BOMBA_AM);
-                    Audio_sfx(SFX_ML_XPLOSIONS);
+                    Shake_bomb();
+                    Effect_bombFlash();
+                    // playBoomClip, bombaAmarilla y "EXPLOSIONS", que
+                    // MonsterLite toca en el mismo frame: una sola muestra
+                    // ya mezclada (tools/ml2md_audio.py), un solo canal.
+                    Audio_sfx(SFX_ML_BOMB_MIX);
                     break;
 
                 case POW_RAYS:
@@ -1103,12 +1112,12 @@ static void playUpdate(u16 pad)
 #if !PORT_NO_HITSTOP
                     hitstopMs += ML_POW_FREEZE_MS;
 #endif
-                    Audio_sfx(SFX_ML_BOMBA_AM);
+                    // bombaAmarilla y "RAYS", mezcladas en una muestra.
+                    Audio_sfx(SFX_ML_RAYS_MIX);
                     MLPow_startRays(player.e.x, player.e.y);
                     // Bloque 10: usar unos rayos.
                     Achieve_unlock(ACH_USE_RAYS);
                     Shake_small(ML_SHAKE_RAYS_F);
-                    Audio_sfx(SFX_ML_RAYS);
                     break;
 
                 default:

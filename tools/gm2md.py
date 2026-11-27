@@ -956,20 +956,8 @@ def menu_tiles():
     write_png(os.path.join(OUT, "weapons.png"), W, H, out, HOLE_PAL)
     print(f"  weapons.png  {W}x{H}  ({len(blocks)} iconos de {cell//8}x{cell//8} tiles)")
 
-    # logo del splash (sprite176, 256x256 -> 51 px) en 7x7 tiles
-    cell = 56
-    canvas = int(round(cell / SCALE))
-    ox, oy, w, h = origin("sprite176")
-    src = frame_files("sprite176")[0]
-    cmd = [
-        "magick", "-size", f"{canvas}x{canvas}", "xc:none",
-        src, "-geometry", f"{canvas//2-ox:+d}{canvas//2-oy:+d}", "-composite",
-        "-filter", "Box", "-resize", f"{cell}x{cell}!",
-        "-depth", "8", "RGBA:-",
-    ]
-    idx = to_indices(subprocess.run(cmd, capture_output=True, check=True).stdout, cell, HOLE_PAL)
-    write_png(os.path.join(OUT, "logo.png"), cell, cell, idx, HOLE_PAL)
-    print(f"  logo.png  {cell}x{cell}  (7x7 tiles)")
+    # logo del menú: desde el 2026-11-27 es el ARENA de MonsterLite
+    # (tools/ml_arena_logo.py), no sprite176 (SURFIZE). No se escribe aquí.
 
     # tile liso para la barra del interludio. oMenu/Draw_0 la pinta con
     # draw_line_width_color(..., c_gray, c_gray): es GRIS (128,128,128), no

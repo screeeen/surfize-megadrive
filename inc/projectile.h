@@ -86,6 +86,11 @@ void Proj_tickFrozen(void);
 // a cada una (ver inc/beam.h). Devuelve cuántas ha escrito.
 u16 Proj_triPositions(fix16 *xs, fix16 *ys, u16 max);
 
+// Cambia cada vez que una holo nace, se activa o muere (las holo no se
+// mueven): quien guarde sus posiciones sólo tiene que volver a pedirlas
+// entonces.
+u16 Proj_holoStamp(void);
+
 // oPlayer/Collision_oPivot: tocar el pivote destruye satélites y réplicas.
 void Proj_clearSatellites(void);
 

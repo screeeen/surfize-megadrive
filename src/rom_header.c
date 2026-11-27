@@ -18,10 +18,15 @@
 //   rom_end       la ÚLTIMA dirección del cartucho, no su tamaño. Tiene que
 //                 cuadrar con el ROM de verdad; lo comprueba
 //                 tools/check_header.py en cada build para que no se quede
-//                 atrás cuando el ROM crezca. 0x11FFFF desde el bloque 12
-//                 (1,125 MB: los sonidos de MonsterLite, menos los del GML que
-//                 ya no se usaban); antes 0x0FFFFF. Sin mapper llega hasta
-//                 0x3FFFFF (4 MB).
+//                 atrás cuando el ROM crezca. 0x15FFFF desde la quinta
+//                 entrega del bloque 12 (1,375 MB: los sonidos de
+//                 MonsterLite, menos los del GML que ya no se usaban, y la
+//                 tabla de tramos de las líneas a las naves holo,
+//                 res/lineseg_tab.h, que pasó de 87 a 239 KB para que la
+//                 consola no voltee ni recorte tramo a tramo: decisión del
+//                 usuario del 2026-11-26, primero la velocidad); antes
+//                 0x13FFFF, y 0x0FFFFF hasta el bloque 12. Sin mapper llega
+//                 hasta 0x3FFFFF (4 MB).
 //   sram_*        sin SRAM: en blanco (espacios), que es como se marca un
 //                 cartucho sin RAM de respaldo. Decisión del usuario del
 //                 2026-11-20: el progreso (récord, monedas, armas compradas,
@@ -45,7 +50,7 @@ const ROMHeader rom_header = {
     0x000,
     "J               ",
     0x00000000,
-    0x0011FFFF,
+    0x0015FFFF,
     0xE0FF0000,
     0xE0FFFFFF,
     "  ",

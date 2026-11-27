@@ -30,7 +30,9 @@ RATE = 13300
 SOUNDS = [
     ("shotSnd",            "sfxShot"),        # oBulletThin
     ("laserSnd",           "sfxLaser"),       # oLaser y oBomba
-    ("boomSnd",            "sfxBoom"),
+    # boomSnd (sfxBoom) ya no: era la misma toma que el Boom.wav de
+    # MonsterLite, que desde la quinta entrega del bloque 12 va dentro de la
+    # mezcla de la bomba (tools/ml2md_audio.py).
     ("aranamorteSnd",      "sfxAranaMorte"),  # oExplosion y morteGusano
     ("dustSnd",            "sfxDust"),
     ("menuSong",           "musMenu"),        # menu(): audio_play_sound(menuSong)

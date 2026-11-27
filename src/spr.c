@@ -1,4 +1,5 @@
 #include "spr.h"
+#include "beam.h"
 
 // Una ranura de más al final: el SUMIDERO. Si alguna vez se agota el pool,
 // Spr_alloc devuelve esa en vez de NULL. Devolver NULL sería un fallo de los
@@ -15,10 +16,14 @@ static u16   sprWanted;     // las pedidas, quepan o no
 static u16   tailStart, tailEnd;
 static u16   tailWalk = 0xFFFF;    // ranuras de la cola a recorrer
 static u16   tailEntries;          // sprites de la cola a la vista
-static u16   satUsed;
+static u16   satUsed;          // entradas en la lista: las del juego y las de las líneas
+static u16   satGame;          // las del juego
+
+static void bandInit(void);
 
 void Spr_init(void)
 {
+    bandInit();
     sprPoolCount = 0;
     sprWanted = 0;
     satUsed = 0;
@@ -44,6 +49,7 @@ MDSpr *Spr_alloc(const SpriteDefinition *def, u16 attr)
 }
 
 u16 Spr_satUsed(void)   { return satUsed; }
+u16 Spr_satGame(void)   { return satGame; }
 u16 Spr_allocated(void) { return sprPoolCount; }
 
 void Spr_tailBegin(void)          { tailStart = sprPoolCount; }
@@ -74,17 +80,17 @@ void Spr_check(void)
 // siguiente y la última lleva 0. Por eso el enlace se escribe como el índice
 // del que viene detrás.
 // ---------------------------------------------------------------------------
-#ifndef PORT_SPR_C
-#define PORT_SPR_C 0
+#ifndef PORT_NO_ASM
+#define PORT_NO_ASM 0
 #endif
 
-#if PORT_SPR_C
-// Implementación de referencia en C del montador, la que había antes de
-// src/spr_a.s. No entra en la build normal: está para poder comparar la tabla
-// que produce el ensamblador contra la que producía esto, volcándola con el
-// comando `vs` del depurador en la misma escena con la semilla fija.
+#if PORT_NO_ASM
+// Implementación en C del montador, la que había antes de src/spr_a.s y la
+// que se usa con PORT_NO_ASM=1 (portable; hasta la quinta entrega del bloque
+// 12 se llamaba PORT_SPR_C). Hace lo mismo que el ensamblador: se puede
+// comparar la tabla volcándola con el comando `vs` del depurador.
 //
-//   make EXTRA_FLAGS="... -DPORT_SPR_C=1"
+//   make EXTRA_FLAGS="... -DPORT_NO_ASM=1"
 u16 Spr_build(void)
 {
     VDPSprite *vs = vdpSpriteCache;
@@ -158,44 +164,86 @@ u16 Spr_build(void)
 // vez rota sin que una línea concreta llegue al límite. La entrada 0 no rota:
 // es la nave, que va siempre encima.
 //
-// Coste: una pasada por la tabla (unas 60 entradas) sumando en 30 franjas,
-// uno de cada 4 frames, y tres enlaces reescritos.
+// Coste: desde el 2026-11-26, un cuarto de la tabla por frame sumando en sus
+// franjas (src/spr_a.s, ~2 000 ciclos con la tabla llena), una mirada a las
+// 32 franjas cada cuatro, y tres enlaces reescritos. Antes era la tabla
+// entera en C uno de cada cuatro frames: ~35 000 ciclos de golpe.
 // ---------------------------------------------------------------------------
-#define BANDS        32
-#define BAND_SPR_MAX 20
-#define BAND_CEL_MAX 40
+// Las franjas llenas, en src/spr_a.s: sprBand, una palabra larga por franja
+// de 8 líneas (sprites << 16 | celdas), y sprBandTab, por tamaño del VDP y
+// fila de arranque (y & 7), lo que suma un sprite a cada franja que toca y
+// cuántas toca menos una (8 bytes por entrada, ver Spr_bandAdd).
+u32 sprBand[SPR_BANDS];
+typedef struct { u32 inc; u16 nb1; u16 pad; } SprBandRow;
+SprBandRow sprBandTab[16 * 8];
+_Static_assert(SAT_MAX_SIZE == VDP_SAT_ENTRIES, "inc/hwlimits.h y SGDK, de acuerdo");
+_Static_assert(sizeof(VDPSprite) == VDP_SPRITE_BYTES, "una entrada de la tabla");
+_Static_assert(SPR_BANDS == 72, "sprBand");
+_Static_assert(sizeof(SprBandRow) == 8, "SprBandRow: 8 bytes (src/spr_a.s, Spr_bandAdd)");
+// El contador de sprites de cada franja arranca en 0x8000 - 21: al pasar de
+// 20 sprites se pone el bit de signo y Spr_bandAdd lo ve con un bmi.
+#define SPR_BAND_ZERO   (((u32)(0x8000 - (VDP_LINE_SPRITES + 1))) << 16)
 
-static bool overflowing(u16 n)
+bool Spr_bandAdd(const VDPSprite *v, u16 count);
+bool Spr_bandOver(void);
+
+#if PORT_NO_ASM
+// Las dos de src/spr_a.s, en C (PORT_NO_ASM=1): la misma cuenta.
+bool Spr_bandAdd(const VDPSprite *v, u16 count)
 {
-    u8 spr[BANDS];
-    u8 cel[BANDS];
-    const VDPSprite *v = vdpSpriteCache;
+    bool hit = FALSE;
+
+    while (count--)
+    {
+        const u16 y = (u16)v->y & 0x3FF;
+
+        if (y < VDP_SPRITE_Y_RANGE)
+        {
+            const SprBandRow *t = &sprBandTab[((v->size_link >> 8) << 3) | (y & 7)];
+            u32 *b = &sprBand[y >> 3];
+            u16 k = t->nb1 + 1;
+
+            while (k--) { *b += t->inc; if (*b & 0x80000000UL) hit = TRUE; b++; }
+        }
+        v++;
+    }
+    return hit;
+}
+
+bool Spr_bandOver(void)
+{
+    bool over = FALSE;
     u16 i;
 
-    memset(spr, 0, sizeof(spr));
-    memset(cel, 0, sizeof(cel));
+    for (i = 16; i < 48; i++)
+        if ((sprBand[i] & 0x80000000UL) || ((sprBand[i] & 0xFFFF) > VDP_LINE_CELLS)) over = TRUE;
+    for (i = 0; i < SPR_BANDS; i++) sprBand[i] = SPR_BAND_ZERO;
+    return over;
+}
+#endif
 
-    for (i = 0; i < n; i++, v++)
-    {
-        const s16 top = (s16)(v->y & 0x3FF) - 0x80;
-        const u16 sz = v->size_link >> 8;
-        const s16 bottom = top + ((((sz & 3) + 1) << 3) - 1);
-        const u8 w = ((sz >> 2) & 3) + 1;
-        s16 b = (top < 0) ? 0 : (top >> 3);
-        const s16 be = (bottom >= (BANDS * 8)) ? (BANDS - 1) : (bottom >> 3);
+static void bandInit(void)
+{
+    u16 sz, r;
 
-        for (; b <= be; b++)
+    for (sz = 0; sz < 16; sz++)
+        for (r = 0; r < 8; r++)
         {
-            if ((++spr[b] > BAND_SPR_MAX) || ((cel[b] += w) > BAND_CEL_MAX)) return TRUE;
-        }
-    }
+            SprBandRow *t = &sprBandTab[(sz << 3) | r];
+            const u16 h = ((sz & 3) + 1) * 8;
 
-    return FALSE;
+            t->inc = 0x10000UL | (((sz >> 2) & 3) + 1);
+            t->nb1 = (u16)((r + h - 1) >> 3);
+            t->pad = 0;
+        }
+    for (r = 0; r < SPR_BANDS; r++) sprBand[r] = SPR_BAND_ZERO;
 }
 
 static u16 rotation;
 
-static void rotate(u16 n, u16 nr)
+// after: la entrada a la que enlaza la última del juego (la primera de las
+// líneas, o 0 si no hay).
+static void rotate(u16 n, u16 nr, u16 after)
 {
     const u16 m = nr - 1;           // entradas que rotan: de la 1 a la nr-1
     u16 s;
@@ -210,15 +258,16 @@ static void rotate(u16 n, u16 nr)
 
     s = 1 + rotation;
 
-    // 0 -> s -> ... -> nr-1 -> 1 -> ... -> s-1 -> (la cola, sin rotar) -> fin
+    // 0 -> s -> ... -> nr-1 -> 1 -> ... -> s-1 -> (la cola, sin rotar) ->
+    // (las líneas) -> fin
     vdpSpriteCache[0].link = s;
     vdpSpriteCache[nr - 1].link = 1;
-    vdpSpriteCache[s - 1].link = (nr < n) ? nr : 0;
+    vdpSpriteCache[s - 1].link = (nr < n) ? nr : after;
 }
 
 void Spr_flush(void)
 {
-    u16 n;
+    u16 n, k, after, len;
 
     // La cola sólo se recorta si de verdad es lo último del pool, y sólo
     // hasta donde diga su dueño que puede haber algo a la vista.
@@ -229,34 +278,7 @@ void Spr_flush(void)
     // y el struct esta ordenado para que la entrada se copie de un tiron.
     n = Spr_build();
 
-    if (n)
-    {
-        // Fin de la lista.
-        vdpSpriteCache[n - 1].link = 0;
-
-        // La comprobación cuesta (medido: con el caso peor, que va justo al
-        // borde del frame, mirarla en cada frame lo tiraba: 8 kills en vez
-        // de 11 a +300). Se mira uno de cada 4 frames y el resultado vale
-        // para los otros tres; un atasco dura mucho más que eso.
-        //
-        // Los sprites de la cola (las líneas a las holo y los rayos) van al
-        // final de la tabla: si una franja se llena, los que se pierden son
-        // ellos, sin tocar al resto. Así que no cuentan para decidir si hay
-        // que rotar, ni rotan: contarlos hacía rotar (y parpadear) los
-        // sprites del juego por culpa de una línea. Si la tabla llegó al
-        // tope de 80 no se sabe cuántos de la cola entraron: se mira todo,
-        // como antes.
-        if (n > 2)
-        {
-            static u8 check;
-            static bool over;
-            const u16 nr = ((n < SAT_MAX_SIZE) && (tailEntries < n)) ? (n - tailEntries) : n;
-
-            if ((check++ & 3) == 0) over = overflowing(nr);
-            if (over) rotate(n, nr);
-        }
-    }
-    else
+    if (n == 0)
     {
         // El VDP siempre lee al menos una entrada: una fuera de pantalla.
         vdpSpriteCache[0].y = 0;
@@ -266,9 +288,69 @@ void Spr_flush(void)
         n = 1;
     }
 
-    satUsed = n;
+    // Las líneas a las holo, con lo que haya dejado libre el juego: van
+    // DETRÁS de todo en la lista (entran por la entrada 79, ver src/beam.c),
+    // así que ni le quitan sitio en la tabla al juego ni, si una línea de
+    // pantalla se llena, le quitan a él los sprites de esa línea: lo que se
+    // pierde es de ellas. Su trozo de la tabla ya está montado y sólo se
+    // sube (en el mismo DMA) lo que cambia.
+    k = Beam_linesFlush(n, &len);
+    after = k ? (SAT_MAX_SIZE - 1) : 0;
+
+    // Fin de la lista del juego: sigue por las líneas, o se acaba.
+    vdpSpriteCache[n - 1].link = after;
+
+    // La comprobación cuesta (medido: con el caso peor, que va justo al
+    // borde del frame, mirarla en cada frame lo tiraba: 8 kills en vez
+    // de 11 a +300). Se suma un cuarto de la tabla por frame y se mira al
+    // cuarto; el resultado vale para los cuatro siguientes: un atasco dura
+    // mucho más que eso.
+    //
+    // Los sprites de la cola (los rayos) van al final de los del juego: si
+    // una franja se llena, los que se pierden son ellos (y antes, las
+    // líneas). Así que no cuentan para decidir si hay que rotar, ni rotan.
+    // Si la tabla llegó al tope de 80 no se sabe cuántos de la cola
+    // entraron: se mira todo, como antes. Las líneas no cuentan nunca.
+    if (n > 2)
+    {
+        static u8 check;
+        static bool over, early;
+        static u16 nrCycle;
+        const u16 nr = ((n < SAT_MAX_SIZE) && (tailEntries < n)) ? (n - tailEntries) : n;
+        const u16 q = check++ & 3;
+        u16 a, b;
+
+        // Los cuartos salen del nr del primer frame de la vuelta (y no del
+        // de cada frame, que cambia: se contaban entradas dos veces o
+        // ninguna), recortados a las que haya este frame.
+        if (q == 0) { nrCycle = nr; early = FALSE; }
+        a = (u16)((nrCycle * q) >> 2);
+        b = (u16)((nrCycle * (q + 1)) >> 2);
+        if (b > nr) b = nr;
+        if (a > b) a = b;
+
+        // Un cuarto de las entradas por frame, y al cuarto frame se mira
+        // (src/spr_a.s): la cuenta junta cuatro frames seguidos, que en un
+        // atasco apenas cambian, y el coste no cae entero en uno solo.
+        // Spr_bandAdd devuelve TRUE en cuanto una franja pasa de 20 sprites
+        // con lo sumado hasta ahora (el signo del contador, sin coste):
+        // entonces se rota ya, sin esperar al cuarto frame. Las celdas se
+        // miran al cuarto, como antes.
+        if (Spr_bandAdd(&vdpSpriteCache[a], b - a)) { early = TRUE; over = TRUE; }
+        if (q == 3) over = Spr_bandOver() || early;
+        if (over) rotate(n, nr, after);
+    }
+
+    satGame = n;
+    satUsed = n + k;
 
     // Sin copia intermedia: la cola se vacia en el vblank y la tabla no se
     // vuelve a tocar hasta el frame siguiente, despues de ese vaciado.
-    VDP_updateSprites(n, DMA_QUEUE);
+    // Directo a la cola de DMA: VDP_updateSprites pasa por DMA_transfer y
+    // DMA_queueDma (que mira si la fuente cruza un banco de 128 KB, cosa que
+    // la RAM no hace) y costaba ~1600 ciclos por frame (medido, 2026-11-26).
+    // Si la cola de DMA está llena no se sube nada: las líneas no pueden
+    // darse por subidas (Beam_linesDmaLost).
+    if (!DMA_queueDmaFast(DMA_VRAM, vdpSpriteCache, VDP_SPRITE_TABLE, len * (sizeof(VDPSprite) / 2), 2))
+        Beam_linesDmaLost();
 }

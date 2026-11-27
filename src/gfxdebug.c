@@ -4,6 +4,7 @@
 
 #include "arena.h"
 #include "spr.h"
+#include "beam.h"
 #include "vramspr.h"
 #include "bg.h"
 #include "hud.h"
@@ -95,7 +96,10 @@ bool GfxDebug_panelOpen(void)
 // Recorre la tabla que acaba de montar Spr_flush, que es la que va al VDP.
 static void analyse(void)
 {
+    const u16 ng = Spr_satGame();
     const u16 n = Spr_satUsed();
+    u16 nl;
+    const VDPSprite *lines = Beam_lineEntries(&nl);
     u16 i, l;
     u16 want = 0;
 
@@ -103,9 +107,11 @@ static void analyse(void)
     memset(lineCell, 0, sizeof(lineCell));
     memset(lineMask, 0, sizeof(lineMask));
 
+    // Las del juego (vdpSpriteCache) y detrás las de las líneas a las holo,
+    // que tienen su propio trozo de la tabla (src/beam.c).
     for (i = 0; i < n; i++)
     {
-        const VDPSprite *v = &vdpSpriteCache[i];
+        const VDPSprite *v = (i < ng) ? &vdpSpriteCache[i] : &lines[i - ng];
         const s16 top = (s16)(v->y & 0x3FF) - 0x80;
         const u16 h = (((v->size_link >> 8) & 3) + 1) * 8;
         const u16 w = ((v->size_link >> 10) & 3) + 1;

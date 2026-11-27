@@ -38,13 +38,13 @@ typedef enum
     SFX_ML_TWAY,        // triBulletSnd
     SFX_ML_CIRCULAR,    // circularBulletSnd
     SFX_ML_XPL,         // bombaXPLSnd: impacto de bala y clearEnemies
-    SFX_ML_BOMBA_AM,    // bombaAmarillaXPLSnd: bomba y rayos
     SFX_ML_POWUP,       // pillaPaqueteGameSnd: paquete y moneda
     SFX_ML_REPETEA,     // repeteaSpeechSnd: nave holo activada
-    SFX_ML_BOOM,        // boomSpeechSnd: bomba (el sfxBoom del GML)
     SFX_ML_ARENA,       // arenaWomanSnd: menú
-    SFX_ML_XPLOSIONS,   // explosionWomanSnd: bomba
-    SFX_ML_RAYS,        // raysWomanSnd: rayos
+    // Las mezclas (tools/ml2md_audio.py, decisión del usuario del 2026-11-26):
+    // lo que MonsterLite toca a la vez en un evento, en una sola muestra.
+    SFX_ML_BOMB_MIX,    // bomba: boomSpeechSnd + bombaAmarillaXPLSnd + explosionWomanSnd
+    SFX_ML_RAYS_MIX,    // rayos: bombaAmarillaXPLSnd + raysWomanSnd
     SFX_ML_AWESOME,     // awesomeWomanSnd: NEW RECORD!
     SFX_ML_CARALLUDO,   // caralludoSpeechSnd (Fafarre.aiff, tono 2)
     SFX_ML_DING,        // dingSnd (tono 3): la cuenta del game over

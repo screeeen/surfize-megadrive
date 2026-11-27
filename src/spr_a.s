@@ -28,10 +28,13 @@
 /*  numTile. El array empieza en el byte 10 del AnimationFrame. */
 /*  =========================================================================== */
 
-/*  Con PORT_SPR_C=1 manda la implementacion de referencia en C que hay en */
-/*  src/spr.c, para poder comparar las dos tablas. Las flags del build llegan */
+/*  Con PORT_NO_ASM=1 mandan las versiones en C de src/spr.c (Spr_build, */
+/*  Spr_bandAdd, Spr_bandOver), que hacen lo mismo: el ensamblador es una */
+/*  optimizacion, no la unica implementacion. Las flags del build llegan */
 /*  aqui porque SGDK ensambla con -x assembler-with-cpp. */
-#if !defined(PORT_SPR_C) || (PORT_SPR_C == 0)
+#include "hwlimits.h"
+
+#if !defined(PORT_NO_ASM) || (PORT_NO_ASM == 0)
 
     .text
     .align  2
@@ -51,30 +54,43 @@ Spr_build:
     lea     sprPool,%a0
     lea     vdpSpriteCache,%a1
     moveq   #0,%d0    /* n: entradas escritas */
+    moveq   #SPR_PARKED_Y,%d7    /* MDSPR_PARKED */
 
+/*  Las aparcadas son la mayoria (~160 de ~240 en el caso peor) y antes */
+/*  costaban 44 ciclos cada una: aqui, comparando contra un registro y sin */
+/*  cargar la y, 34; las visibles, sin movem y sin pasar dos veces por el */
+/*  salto (2026-11-26, plan de 50 fps, paso 1). */
 .Lloop:
-    move.w  (%a0),%d2    /* y */
-    cmp.w   #-128,%d2    /* aparcado? */
-    beq.s   .Lnext
+    cmp.w   (%a0),%d7    /* aparcado? */
+    bne.s   .Lvis
+    lea     18(%a0),%a0
+    dbf     %d1,.Lloop
+    bra     .Ldone
+
+.Lvis:
     tst.w   8(%a0)    /* parts */
     bne.s   .Lmulti
 
 /*  --- caso normal: un sprite de hardware, la entrada ya esta formada --- */
-    movem.l (%a0),%d2-%d3    /* d2 = y|sizeLink, d3 = attr|x */
+    move.l  (%a0)+,%d2    /* d2 = y|sizeLink */
     addq.w  #1,%d0
     or.w    %d0,%d2    /* enlace a la siguiente */
-    movem.l %d2-%d3,(%a1)
-    lea     8(%a1),%a1
-    cmp.w   #80,%d0    /* tope del VDP */
-    bcc.s   .Ldone
+    move.l  %d2,(%a1)+
+    move.l  (%a0)+,(%a1)+    /* attr|x */
+    lea     10(%a0),%a0    /* a la siguiente ranura (18 en total) */
+    cmp.w   #VDP_SAT_ENTRIES,%d0    /* tope del VDP */
+    bcc     .Ldone
+    dbf     %d1,.Lloop
+    bra     .Ldone
 
 .Lnext:
     lea     18(%a0),%a0
     dbf     %d1,.Lloop
-    bra.s   .Ldone
+    bra     .Ldone
 
 /*  --- frame partido en varios sprites de hardware (solo la explosion) --- */
 .Lmulti:
+    move.w  (%a0),%d2    /* y */
     move.w  8(%a0),%d4    /* parts */
     move.l  10(%a0),%a2
     lea     10(%a2),%a2    /* frameVDPSprites */
@@ -108,8 +124,8 @@ Spr_build:
 
     lea     6(%a2),%a2
     lea     8(%a1),%a1
-    cmp.w   #80,%d0
-    bcc.s   .Ldone
+    cmp.w   #VDP_SAT_ENTRIES,%d0
+    bcc     .Ldone
     subq.w  #1,%d4
     bne.s   .Lmloop
     bra.s   .Lnext
@@ -121,6 +137,100 @@ Spr_build:
 .Lempty:
     moveq   #0,%d0
     movem.l (%sp)+,%d2-%d7/%a2-%a3
+    rts
+
+/*  =========================================================================== */
+/*  Las franjas llenas (la rotacion de src/spr.c) */
+/*  */
+/*  Hasta el 2026-11-26 la comprobacion iba en C y entera uno de cada cuatro */
+/*  frames: ~35 000 ciclos de golpe con la tabla llena (medido: Spr_flush */
+/*  pasaba de ~21 000 a 53 000-67 000 en esos frames), casi un cuarto de */
+/*  frame. Ahora cada frame suma un cuarto de las entradas (Spr_bandAdd) y */
+/*  al cuarto se mira (Spr_bandOver): lo mismo repartido, y en ensamblador. */
+/*  */
+/*  sprBand: una palabra larga por franja de 8 lineas, sprites << 16 | */
+/*  celdas de ancho, indexada por (y del VDP) >> 3: las lineas 0 a 255 de la */
+/*  pantalla son las franjas 16 a 47 (y = 128 a 383). 72 franjas: cualquier */
+/*  y del VDP de 0 a 511, mas las 4 que puede tocar hacia abajo. */
+/*  =========================================================================== */
+    .globl  Spr_bandAdd
+    .globl  Spr_bandOver
+    .globl  sprBandHit
+
+    .bss
+sprBandHit: .skip 2
+    .text
+
+/*  bool Spr_bandAdd(const VDPSprite *v, u16 count): TRUE si alguna franja */
+/*  ha pasado de 20 sprites al sumar (el contador arranca en 0x8000 - 21 y */
+/*  se le pone el signo: un bmi por franja, ~8 ciclos). */
+Spr_bandAdd:
+    movem.l %d2-%d4/%a2-%a3,-(%sp)
+    move.l  24(%sp),%a0
+    move.w  30(%sp),%d2
+    subq.w  #1,%d2
+    bmi.s   9f
+    lea     sprBandTab,%a2
+    lea     sprBand,%a3
+1:  move.w  (%a0),%d0
+    and.w   #0x3FF,%d0
+    cmp.w   #VDP_SPRITE_Y_RANGE,%d0
+    bcc.s   8f                  /* muy abajo: no toca la pantalla */
+    moveq   #0,%d1
+    move.b  2(%a0),%d1          /* tamano */
+    lsl.w   #3,%d1
+    move.w  %d0,%d3
+    and.w   #7,%d3
+    or.w    %d3,%d1
+    lsl.w   #3,%d1              /* (tamano * 8 + y & 7) * 8 */
+    move.l  0(%a2,%d1.w),%d3    /* 1 << 16 | ancho en celdas */
+    move.w  4(%a2,%d1.w),%d4    /* franjas que toca - 1 */
+    lsr.w   #3,%d0
+    add.w   %d0,%d0
+    add.w   %d0,%d0
+    lea     0(%a3,%d0.w),%a1
+2:  add.l   %d3,(%a1)+
+    bmi.s   7f                  /* esa franja pasa de 20 sprites */
+3:  dbf     %d4,2b
+8:  addq.l  #8,%a0
+    dbf     %d2,1b
+9:  moveq   #0,%d0
+    tst.b   sprBandHit
+    beq.s   10f
+    moveq   #1,%d0
+    clr.b   sprBandHit
+10: movem.l (%sp)+,%d2-%d4/%a2-%a3
+    rts
+7:  st      sprBandHit
+    bra.s   3b
+
+/*  bool Spr_bandOver(void): alguna franja de la pantalla con mas de 20 */
+/*  sprites o 40 celdas; y deja sprBand a cero para la vuelta siguiente. */
+Spr_bandOver:
+    move.l  %d2,-(%sp)
+    lea     sprBand+64,%a0      /* franja 16 */
+    moveq   #31,%d1
+    moveq   #0,%d0
+1:  move.l  (%a0)+,%d2
+    bmi.s   2f                  /* mas de 20 sprites */
+    cmp.w   #VDP_LINE_CELLS,%d2
+    bhi.s   2f
+    dbf     %d1,1b
+    bra.s   3f
+2:  moveq   #1,%d0
+3:  lea     sprBand+(SPR_BANDS * 4),%a0     /* a cero de atras adelante */
+    move.l  #((0x8000 - (VDP_LINE_SPRITES + 1)) << 16),%d1
+    moveq   #8,%d2
+4:  move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    move.l  %d1,-(%a0)
+    dbf     %d2,4b
+    move.l  (%sp)+,%d2
     rts
 
 #endif

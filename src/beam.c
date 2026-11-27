@@ -11,6 +11,7 @@
 #include "hole.h"
 #include "weapon.h"
 #include "mlpow.h"
+#include "lineseg_tab.h"
 
 #define BEAM_SPR_OFF    (-(BEAM_CELL / 2))
 #define DOT_SPR_OFF     (-(DOT_CELL / 2))
@@ -18,87 +19,138 @@
 #define MAX_RAY_DOTS    (MLPOW_MAX_RAYS * BEAM_RAY_DOTS)
 
 static MDSpr *segSprite[BEAM_SEGMENTS];
-static MDSpr *lineDot[BEAM_LINE_SPRITES];
 static MDSpr *rayDot[MAX_RAY_DOTS];
 static u16    beamTile[8][BEAM_COLORS];
-// Cuántos puntos de líneas y de rayos se enseñaron el frame anterior: sólo
-// hay que esconder esos, no el pool entero cada frame.
+// Cuántos puntos de rayos se enseñaron el frame anterior: sólo hay que
+// esconder esos, no el pool entero cada frame.
 static u16    rayShown;
 static u16    dotTile[DOT_COLORS];
-// 32768 / k para k = 0..LINE_MAX_LEN (el 0 y el 1 no se usan): las
-// divisiones de updateLines, como multiplicación. DIVS y DIVU cuestan unos
-// 150 ciclos cada una.
-#define LINE_MAX_LEN    400     // la diagonal de 320x240
-static u16 recip[LINE_MAX_LEN + 1];
 
-// Los tramos de las líneas a las holo (tools/ml_lineseg.py): 7 direcciones
-// entre 0 y 90 grados, cada una con su sprite de varios puntos de 2x2 a ~3 px.
-// De 90 a 180, la misma con volteo vertical.
+// ---------------------------------------------------------------------------
+// Las líneas a las holo: estado
+//
+// Desde la quinta entrega (2026-11-26) las líneas NO van en el pool de
+// sprites: tienen su propio trozo de la tabla del VDP, ya montado, que sólo
+// se toca cuando cambia algo. Ver Beam_linesFlush.
+//
+// Las entradas 40 a 79 de la tabla son de las líneas, al revés: la ranura j
+// (0 = la primera en la lista del VDP) es la entrada 79 - j. La lista entra
+// por la 79 y baja: cada ranura enlaza con la siguiente (78 - j) y la última
+// a la vista con 0. Así los enlaces no dependen de cuántas ranuras quepan
+// este frame (las que deja libres el juego, que va en las entradas 0 a
+// n - 1): sólo hay que poner a 0 el de la última.
+//
+// Hay dos copias:
+//   - lineSat, la imagen: la ranura j en lineSat[39 - j], colocada SIN
+//     sacudida. Es lo que rehace src/beam_a.s y nada más la toca;
+//   - vdpSpriteCache[79 - j], la que se sube: la imagen más la sacudida. El
+//     montador del juego la pisa cuando necesita esas entradas, así que de
+//     cada frame al siguiente sólo vale hasta lineD.
+// Con la sacudida en la copia, que cambie es sumar dos palabras largas por
+// ranura a la vista al copiar (Beam_linesCopy), sin tocar la imagen.
+//
+// Cada línea ocupa ranuras seguidas, una detrás de otra en el orden de las
+// holo (lineSt[i].slot, .cnt). El reparto por holo es el de siempre: 40 entre
+// las que haya, y si una celda tiene más tramos se toman repartidos.
+// ---------------------------------------------------------------------------
+
+// 20 bytes y en este orden: src/beam_a.s la lee con desplazamientos fijos
+// (LS_*). El rectángulo va como (inicio, ancho - 1) para que la nave esté
+// dentro si (u16)(x - xlo) <= xw: una resta y una comparación por eje.
 typedef struct
 {
-    u8  tile;       // primer tile dentro de lineseg.png
-    u8  size;       // SPRITE_SIZE del sprite
-    u8  ax, ay;     // el centro del primer punto dentro del sprite
-    u8  h;          // alto del sprite en px (para el volteo)
-    u16 adv16;      // avance de un tramo al siguiente, en 1/16 px
-    u16 segK;       // 32768 * 16 / adv16: tramos = len * segK >> 15
-} LineSeg;
+    s16 xlo; u16 xw;    // 0, 2   las x de la nave con las que la celda no cambia
+    s16 ylo; u16 yw;    // 4, 6
+    s16 hx, hy;         // 8, 10  la holo
+    u16 key;            // 12     celda | volteo x << 14 | volteo y << 15
+    u8  slot, cnt;      // 14, 15 primera ranura y cuántas
+    u16 pad[2];         // 16
+} LineSt;
 
-static const LineSeg lineSeg[7] =
+// Lo que src/beam_a.s recibe para recorrer las líneas (Beam_linesScan).
+typedef struct
 {
-    {  0, SPRITE_SIZE(4, 1), 2, 4,  8, 480, 1092 },   // (3,0)  0,0 grados, 10 puntos
-    {  4, SPRITE_SIZE(2, 1), 2, 2,  8, 253, 2072 },   // (3,1) 18,4 grados, 5
-    {  6, SPRITE_SIZE(2, 2), 2, 4, 16, 288, 1820 },   // (3,2) 33,7 grados, 5
-    { 10, SPRITE_SIZE(2, 2), 2, 2, 16, 317, 1654 },   // (2,2) 45,0 grados, 7
-    { 14, SPRITE_SIZE(2, 2), 4, 2, 16, 288, 1820 },   // (2,3) 56,3 grados, 5
-    { 18, SPRITE_SIZE(1, 2), 2, 2, 16, 253, 2072 },   // (1,3) 71,6 grados, 5
-    { 20, SPRITE_SIZE(1, 4), 4, 2, 32, 480, 1092 },   // (0,3) 90,0 grados, 10
+    LineSt *st;         // 0   la primera línea
+    u16 nScan;          // 4   cuántas
+    s16 x0, y0;         // 6, 8   la nave
+    u16 mode;           // 10  1: mirar x, 2: mirar y, 3: las dos
+    s16 bx, by;         // 12, 14 0x80 (la imagen va sin sacudida)
+    u16 attr;           // 16  atributo de los tramos sin volteo
+    u16 blk;            // 18  tramos por línea como mucho
+    const u16 *pickRow; // 20  lineSegPickRow del bloque
+    u16 minSlot;        // 24  la ranura más baja reescrita (0xFFFF: ninguna)
+    u16 pad[2];         // 26
+    u16 budget;         // 30  ranuras que caben
+} LineScan;
+
+#define LS_KEY_NONE     0xFFFF          // la línea hay que rehacerla
+#define LS_XLO_NONE     0x7FFF          // y con este rectángulo, se mira seguro
+#define LINE_SAT_FIRST  (SAT_MAX_SIZE - BEAM_LINE_SPRITES)     // 40
+
+_Static_assert((PLAYFIELD_W == SCREEN_W) && (PLAYFIELD_H == SCREEN_H), "beam_a.s recorta contra la pantalla");
+_Static_assert(BEAM_LINE_SPRITES == LINE_SAT_SLOTS, "beam_a.s");
+_Static_assert(sizeof(LineSt) == 20, "LineSt: 20 bytes (beam_a.s, LS_SIZE)");
+_Static_assert(__builtin_offsetof(LineScan, budget) == 30, "LineScan: desplazamientos de beam_a.s");
+_Static_assert(BEAM_LINE_SPRITES <= SAT_MAX_SIZE / 2, "las líneas, en la mitad alta de la tabla");
+
+// No static: los lee src/beam_a.s.
+LineSt    lineSt[MAX_LINES];
+VDPSprite lineSat[BEAM_LINE_SPRITES];
+
+
+static u16 lineSegBase;         // primer tile de lineseg.png en VRAM
+static u16 lineAttr;            // TILE_ATTR_FULL de los tramos, sin volteo
+// El estado de un frame al siguiente, en un struct porque Beam_linesFlush va
+// en ensamblador (src/beam_a.s, desplazamientos G_*).
+typedef struct
+{
+    u16 n;              // 0   líneas (holo activas)
+    u16 d;              // 2   ranuras [0, d) bien en vdpSpriteCache
+    u16 v;              // 4   ranuras [0, v) bien en la VRAM
+    u16 k;              // 6   ranuras a la vista el último frame
+    u16 end;            // 8   ranuras ocupadas entre todas
+    s16 x, y;           // 10, 12 la nave (Beam_update)
+    s16 scx, scy;       // 14, 16 la nave del último recorrido
+    u16 done;           // 18  líneas [0, done) hechas con la nave en scx, scy
+    s16 gx, gy;         // 20, 22 la sacudida de la copia
+    u16 force;          // 24  hay líneas que rehacer (holo nuevas)
+    u16 blk;            // 26  tramos por línea como mucho
+    u16 budget;         // 28  las ranuras que cabían el último frame
+} LineGlob;
+
+_Static_assert(__builtin_offsetof(LineGlob, budget) == 28, "LineGlob: desplazamientos de beam_a.s");
+
+LineGlob  lineG;                // no static: src/beam_a.s
+LineScan  lineCtx;              // lo de src/beam_a.s que no cambia de frame a frame
+
+#define lineN       lineG.n
+#define lineD       lineG.d
+#define lineV       lineG.v
+#define lineK       lineG.k
+#define lineEnd     lineG.end
+#define lineX       lineG.x
+#define lineY       lineG.y
+#define lineForce   lineG.force
+#define lineDone    lineG.done
+#define lineBlk     lineG.blk
+
+static const u16 *linePickRow;
+static bool lineHolosOK;        // las posiciones de las holo, leídas
+static u16 lineStamp;           // con este Proj_holoStamp
+
+static void tailRefresh(void);
+static void linesReset(u16 n);
+
+// El tope de la esquina de un tramo dentro del campo según su tamaño (el
+// byte de tamaño de la tabla del VDP): 320 - ancho y 240 - alto. Lo usa
+// src/beam_a.s con las líneas que pasan cerca del borde.
+#define CLIP(sz) (PLAYFIELD_W - ((((sz) >> 2) + 1) * 8)), (PLAYFIELD_H - ((((sz) & 3) + 1) * 8))
+const u16 lineClip[32] =
+{
+    CLIP(0), CLIP(1), CLIP(2), CLIP(3), CLIP(4), CLIP(5), CLIP(6), CLIP(7),
+    CLIP(8), CLIP(9), CLIP(10), CLIP(11), CLIP(12), CLIP(13), CLIP(14), CLIP(15),
 };
-
-// coseno y seno de cada dirección, en 1/256: la longitud de la línea es su
-// proyección sobre la dirección elegida (como mucho a 9,2 grados de la de
-// verdad: se queda corta un 1,3 % a lo sumo), dos multiplicaciones en vez de
-// una raíz cuadrada.
-static const u16 lineSegCos[7] = { 256, 243, 213, 181, 142, 81, 0 };
-static const u16 lineSegSin[7] = { 0, 81, 142, 181, 213, 243, 256 };
-
-// tan de los ángulos a medio camino entre dos direcciones, en 1/256:
-// 9,2 / 26,1 / 39,4 / 50,6 / 63,9 / 80,8 grados.
-static const u16 lineSegTan[6] = { 42, 125, 210, 312, 524, 1577 };
-
-static u16 lineSegBase;     // primer tile de lineseg.png en VRAM
-
-// Estado de las líneas, que se conserva de un frame al siguiente (ver
-// updateLines): cada línea tiene su bloque fijo de sprites (lineBlk, a partes
-// iguales entre las que haya) y su cuenta de sprites por franja de 8 px, para
-// poder rehacer sólo algunas en cada frame sin perder el tope global por
-// franja.
-#define LINE_BANDS      ((PLAYFIELD_H / 8) + 1)
-#define LINES_PER_FRAME 2       // líneas que se rehacen por frame si se mueve la nave
-static u16 lineN = 0xFFFF;      // holo de la última vez (0xFFFF: rehacer todo)
-static u16 lineBlk;             // sprites por línea
-static u8  lineCnt[MAX_LINES];  // sprites usados en el bloque de cada línea
-static u8  lineBand[MAX_LINES][LINE_BANDS];
-static u8  bandUse[LINE_BANDS]; // suma de lineBand: sprites de línea por franja
-static s16 lineKey[MAX_LINES][4];   // nave x, y y holo x, y con los que se hizo
-static u16 lineRR;              // la siguiente línea por turno
-static u16 lineHigh;            // sprites de línea copiados a la cola (seguidos)
-static u16 lineVis;             // sprites de línea a la vista
-// Los tramos se calculan aquí, fuera del pool, en bloques fijos por línea
-// (posición sin la sacudida), y los que se ven se copian seguidos a la cola
-// del pool (lineDot): así el montador no recorre huecos aparcados.
-static MDSpr lineVirt[BEAM_LINE_SPRITES];
-static u8  lineB0[MAX_LINES], lineB1[MAX_LINES];  // franjas que ocupa cada línea
-static s16 lineLastX, lineLastY;    // la nave la última vez que se miró
-static bool lineDirty;          // quedan líneas por rehacer
-static u8  lineTick;
-static s16 lineSX, lineSY;      // sacudida con la que están colocados
-
-// La dirección de cada (ax, ay) con los dos por debajo de 32: una tabla en
-// vez de las seis comparaciones con multiplicación (Beam_init).
-static u8 dirLUT[32 * 32];
-
-
+#undef CLIP
 
 void Beam_init(void)
 {
@@ -106,21 +158,6 @@ void Beam_init(void)
 
     VSpr_load(&beamSprite, &beamTile[0][0], BEAM_COLORS);
     VSpr_load(&dotSprite, dotTile, 1);
-
-    recip[0] = recip[1] = 0;
-    for (i = 2; i <= LINE_MAX_LEN; i++) recip[i] = (u16)(32768U / i);
-
-    {
-        u16 ax, ay, d;
-
-        for (ay = 0; ay < 32; ay++)
-            for (ax = 0; ax < 32; ax++)
-            {
-                for (d = 0; d < 6; d++)
-                    if ((ay << 8) < (ax * lineSegTan[d])) break;
-                dirLUT[(ay << 5) | ax] = (u8)d;
-            }
-    }
 
     for (i = 0; i < BEAM_SEGMENTS; i++)
         segSprite[i] = VSpr_add(&beamSprite, PAL1, beamTile[0][0]);
@@ -142,16 +179,13 @@ void Beam_initDots(void)
     u16 i;
 
     // Son la cola del pool (inc/spr.h): el montador no las recorre mientras
-    // no haya ninguna a la vista, que es casi siempre.
+    // no haya ninguna a la vista, que es casi siempre. Las líneas a las holo
+    // ya no están en el pool (ver Beam_linesFlush): sólo sus tiles, 24,
+    // sacados del fondo (VTILE_SHARED_TILES).
     Spr_tailBegin();
-    // Los tramos de las líneas a las holo: 24 tiles, sacados del fondo
-    // (VTILE_SHARED_TILES). Cada sprite cambia de tamaño y de tile según la
-    // dirección (ver updateLines); se reparten con un 8x8 cualquiera.
     lineSegBase = VTile_alloc(lineSegTiles.numTile);
     VDP_loadTileSet(&lineSegTiles, lineSegBase, DMA);
-    for (i = 0; i < BEAM_LINE_SPRITES; i++)
-        lineDot[i] = VSpr_add(&trailSprite, PAL1, lineSegBase);
-
+    lineAttr = TILE_ATTR_FULL(PAL1, FALSE, FALSE, FALSE, lineSegBase);
     for (i = 0; i < MAX_RAY_DOTS; i++)
         rayDot[i] = VSpr_add(&dotSprite, PAL1, dotTile[0]);
     Spr_tailEnd();
@@ -165,14 +199,13 @@ void Beam_clear(void)
     u16 i;
 
     for (i = 0; i < BEAM_SEGMENTS; i++) sprHide(segSprite[i]);
-    for (i = 0; i < BEAM_LINE_SPRITES; i++) sprHide(lineDot[i]);
     for (i = 0; i < MAX_RAY_DOTS; i++) sprHide(rayDot[i]);
     rayShown = 0;
-    lineN = 0xFFFF;         // las líneas, a rehacer enteras
-    lineHigh = 0;
-    lineVis = 0;
-    Spr_tailVisible(0);
-    Spr_tailEntries(0);
+    // Las líneas, a rehacer enteras, y las holo, a volver a pedir.
+    lineHolosOK = FALSE;
+    linesReset(0);
+    lineK = 0;
+    tailRefresh();
 }
 
 static void hideBeam(void)
@@ -243,260 +276,450 @@ static void updateBeam(u16 weaponIndex, u16 ammo, fix16 px, fix16 py, fix16 angl
     }
 }
 
-// La línea azul de la nave a cada holo activa (gizmosProxy de MonsterLite,
-// oPlayer/Draw_0 del GML). Desde el 2026-11-21 (decisión del usuario), del
-// grosor de la estela y de puntos muy juntos: tramos de puntos de 2x2 a ~3 px
-// (2,8-3,6 según la dirección, tools/ml_lineseg.py), cada uno un sprite,
-// puestos uno detrás de otro sobre la línea de verdad. Como cada tramo va en
-// una de 7 direcciones, se vuelve a apoyar en la línea al empezar el
-// siguiente. Los tramos se centran en la línea: lo que sobra (menos de un
-// tramo) queda repartido en los dos extremos, debajo de la nave y de la holo.
-//
-// Topes (inc/beam.h): BEAM_LINE_SPRITES tramos entre todas las líneas, a
-// partes iguales (si a una no le llegan, sus tramos se separan y quedan
-// huecos), y BEAM_LINE_BAND sprites de línea por franja de 8 px (lo que se
-// pase se salta y deja un hueco).
-// Cuántas ranuras de la cola tiene que recorrer el montador: todas si hay
-// rayos (van detrás de las líneas), si no hasta el último sprite de línea.
+// Cuántas ranuras de la cola tiene que recorrer el montador: los rayos, si
+// los hay (las líneas ya no van en el pool).
 static void tailRefresh(void)
 {
-    Spr_tailVisible(rayShown ? 0xFFFF : lineHigh);
-    Spr_tailEntries(lineHigh + rayShown);
+    Spr_tailVisible(rayShown ? 0xFFFF : 0);
+    Spr_tailEntries(rayShown);
 }
 
-// Rehace la línea i (de la nave en (x0, y0) a la holo en (x1, y1)) en su
-// bloque de sprites.
-static void buildLine(u16 i, s16 x0, s16 y0, s16 x1, s16 y1)
+// Los enlaces fijos de las ranuras (ver arriba): la j enlaza con la entrada
+// 78 - j. La última a la vista la pone a 0 Beam_linesFlush.
+static FORCE_INLINE void lineLink(u16 j)
 {
-    MDSpr *blk = &lineVirt[i * lineBlk];
-    u8 *lb = lineBand[i];
-    s16 dx = x1 - x0, dy = y1 - y0;
-    const LineSeg *g;
-    u16 ax, ay, len, d, segs, flip, used = 0, b, k;
-    u16 step16, offs16, rec;
-    s32 cx, cy, sx15, sy15;
+    lineSat[(BEAM_LINE_SPRITES - 1) - j].link = (u8)((SAT_MAX_SIZE - 2) - j);
+}
 
-    lineKey[i][0] = x0; lineKey[i][1] = y0;
-    lineKey[i][2] = x1; lineKey[i][3] = y1;
+static void linesReset(u16 n)
+{
+    u16 i;
 
-    // Fuera lo que tenía: sus franjas, del total (sólo el tramo que ocupaba).
-    for (b = lineB0[i]; b <= lineB1[i]; b++) { bandUse[b] -= lb[b]; lb[b] = 0; }
-    lineB0[i] = LINE_BANDS - 1;
-    lineB1[i] = 0;
-
-    // Las líneas no tienen sentido: se recorren siempre hacia la derecha,
-    // y si suben, con el tramo volteado.
-    if (dx < 0) { x0 = x1; y0 = y1; dx = -dx; dy = -dy; }
-    ax = dx;
-    ay = (dy < 0) ? -dy : dy;
-    flip = (dy < 0);
-
-    // La dirección más cercana: la tabla, con (ax, ay) reducidos a menos de
-    // 32 (la proporción es lo único que cuenta).
+    lineN = n;
+    lineBlk = n ? lineSegBlkLen[lineSegBlkOf[n]] : 0;
+    linePickRow = &lineSegPickRow[(n ? lineSegBlkOf[n] : 0) * (LINESEG_MAXC + 1)];
+    for (i = 0; i < MAX_LINES; i++)
     {
-        u16 rx = ax, ry = ay;
+        LineSt *l = &lineSt[i];
 
-        while ((rx | ry) >= 32) { rx >>= 1; ry >>= 1; }
-        d = dirLUT[(ry << 5) | rx];
+        l->xlo = LS_XLO_NONE; l->xw = 0;
+        l->ylo = LS_XLO_NONE; l->yw = 0;
+        l->key = LS_KEY_NONE;
+        l->slot = 0;
+        l->cnt = 0;
     }
-    g = &lineSeg[d];
+    for (i = 0; i < BEAM_LINE_SPRITES; i++) lineLink(i);
+    lineEnd = 0;
+    lineD = 0;
+    lineV = 0;
+    lineDone = 0;
+    lineForce = TRUE;
+    lineCtx.attr = lineAttr;
+    lineCtx.blk = lineBlk;
+    lineCtx.pickRow = linePickRow;
+    lineCtx.st = lineSt;
+    lineCtx.bx = 0x80;
+    lineCtx.by = 0x80;
+}
 
-    len = (u16)((((u32)(u16)ax * (u32)(u16)lineSegCos[d]) + ((u32)(u16)ay * (u32)(u16)lineSegSin[d])) >> 8);
-    if (len > LINE_MAX_LEN) len = LINE_MAX_LEN;
-    segs = 0;
-    if (len >= 2)
+// La línea l pasa a tener cnt ranuras: las de las líneas de detrás se corren
+// (con sus enlaces, que son de la ranura y no del tramo). Lo llama
+// src/beam_a.s cuando cambia el número de tramos de una línea, que con 10
+// holo casi nunca pasa (son 4 y las celdas tienen más).
+void Beam_lineResize(LineSt *l, u16 cnt)
+{
+    const s16 d = (s16)cnt - (s16)l->cnt;
+    const u16 from = l->slot + l->cnt;
+    const u16 m = lineEnd - from;
+    LineSt *e = &lineSt[lineN];
+    LineSt *k;
+    u16 j;
+
+    if (d == 0) return;
+
+    // La ranura j está en lineSat[39 - j]: las de detrás de la línea (de from
+    // a lineEnd) son un trozo seguido que baja en memoria.
+    if (m)
     {
-        // Cuántos tramos caben enteros: len * 16 / adv16, por el inverso de
-        // la tabla, y un ajuste de uno por el redondeo.
-        const u16 l16 = (u16)(len << 4);
+        VDPSprite *src = &lineSat[BEAM_LINE_SPRITES - from - m];
+        VDPSprite *dst = src - d;
 
-        segs = (u16)(((u32)(u16)len * (u32)(u16)g->segK) >> 15);
-        if ((u16)((u32)(u16)(segs + 1) * (u32)(u16)g->adv16) <= l16) segs++;
-        else if (segs && ((u16)((u32)(u16)segs * (u32)(u16)g->adv16) > l16)) segs--;
+        if (d > 0) for (j = 0; j < m; j++) dst[j] = src[j];
+        else       for (j = m; j-- > 0; )  dst[j] = src[j];
+        for (j = from + d; j < from + d + m; j++) lineLink(j);
     }
-
-    if (segs)
-    {
-        if (segs <= lineBlk)
-        {
-            step16 = g->adv16;
-            offs16 = (u16)(((u16)(len << 4) - (u16)((u32)(u16)segs * (u32)(u16)g->adv16)) >> 1);
-        }
-        else
-        {
-            // No llegan: los que haya, repartidos a lo largo, con huecos.
-            const u16 l16 = (u16)(len << 4);
-
-            segs = lineBlk;
-            step16 = (u16)(((u32)l16 * (u32)recip[segs]) >> 15);
-            offs16 = (step16 - g->adv16) >> 1;
-        }
-
-        rec = recip[len];
-
-        // Dónde empieza cada tramo: a offs16 + k * step16 (1/16 px) del
-        // origen, como fracción de la línea en 1/32768. Las dos fracciones
-        // se calculan una vez por línea y los tramos se recorren sumando, en
-        // 1/32768 de píxel.
-        {
-            const u16 t0 = (u16)(((u32)(u16)offs16 * (u32)(u16)rec) >> 4);
-            const u16 ts = (u16)(((u32)(u16)step16 * (u32)(u16)rec) >> 4);
-
-            cx = ((s32)x0 << 15) + ((s32)(s16)dx * (s32)(s16)t0);
-            cy = ((s32)y0 << 15) + ((s32)(s16)dy * (s32)(s16)t0);
-            sx15 = (s32)(s16)dx * (s32)(s16)ts;
-            sy15 = (s32)(s16)dy * (s32)(s16)ts;
-        }
-
-        for (k = 0; k < segs; k++, cx += sx15, cy += sy15)
-        {
-            const s16 ox = (s16)(cx >> 15) - g->ax;
-            const s16 oy = (s16)(cy >> 15) - (flip ? (s16)(g->h - g->ay) : (s16)g->ay);
-            u16 b0, b1;
-            bool full = FALSE;
-
-            if ((oy < 0) || (ox < 0) || ((oy + g->h) > PLAYFIELD_H) || (ox >= PLAYFIELD_W)) continue;
-
-            b0 = oy >> 3;
-            b1 = (oy + g->h - 1) >> 3;
-            for (b = b0; b <= b1; b++) if (bandUse[b] >= BEAM_LINE_BAND) full = TRUE;
-            if (full) continue;
-            for (b = b0; b <= b1; b++) { bandUse[b]++; lb[b]++; }
-            if (b0 < lineB0[i]) lineB0[i] = (u8)b0;
-            if (b1 > lineB1[i]) lineB1[i] = (u8)b1;
-
-            {
-                MDSpr *sp = &blk[used++];
-
-                // Sin la sacudida: se le resta al copiarlo a la cola.
-                sp->x = ox + 0x80;
-                sp->y = oy + 0x80;
-                sp->sizeLink = ((u16)g->size) << 8;
-                sp->attr = TILE_ATTR_FULL(PAL1, FALSE, flip, FALSE, lineSegBase + g->tile);
-            }
-        }
-    }
-
-    lineVis = lineVis - lineCnt[i] + used;
-    lineCnt[i] = (u8)used;
+    for (k = l + 1; k < e; k++) k->slot = (u8)(k->slot + d);
+    lineEnd = (u16)(lineEnd + d);
+    l->cnt = (u8)cnt;
+    if (lineD > l->slot) lineD = l->slot;
 }
 
 // La línea azul de la nave a cada holo activa (gizmosProxy de MonsterLite,
-// oPlayer/Draw_0 del GML). Desde el 2026-11-21 (decisión del usuario), del
-// grosor de la estela y de puntos muy juntos: tramos de puntos de 2x2 a ~3 px
-// (tools/ml_lineseg.py), uno por sprite, puestos uno detrás de otro sobre la
-// línea de verdad (buildLine).
+// oPlayer/Draw_0 del GML). Del grosor de la estela y de puntos muy juntos
+// (decisión del usuario del 2026-11-21): tramos de varios puntos de 2x2 a
+// ~3 px, uno por sprite (tools/ml_lineseg.py).
 //
-// Para que no cueste (decisión del usuario del 2026-11-22), lo hecho se
-// guarda de un frame al siguiente:
-//   - si cambia el número de holo, se borran todas y vuelven a salir por
-//     turnos;
-//   - si sólo cambia la sacudida, se mueven los sprites ya puestos lo mismo
-//     que ella (sprPos le resta la sacudida);
-//   - si se mueve la nave, se rehacen LINES_PER_FRAME líneas por frame, por
-//     turnos: con 10 holo, cada línea va como mucho 4 frames tarde (unos
-//     6 px a la velocidad de la nave), y su extremo queda debajo de la nave;
-//   - si nada se ha movido, no se hace nada.
+// Aquí sólo se apunta dónde están la nave y las holo; las líneas se rehacen
+// en Beam_linesFlush, que corre dentro de Spr_flush y ya sabe cuántas
+// entradas de la tabla le quedan libres.
+// Las holo han cambiado pero el reparto por línea no (40 / holo da lo
+// mismo, p. ej. de 10 a 9): las líneas de las que siguen se quedan como
+// están. Las holo no se mueven y Proj_triPositions las da en el orden del
+// pool, que no cambia, así que basta con quitar las que ya no están (sus
+// ranuras se cierran, Beam_lineResize) y meter las nuevas en su sitio, sin
+// ranuras, para que se hagan en el siguiente Beam_linesFlush. Antes se
+// rehacían todas: ~10 000 ciclos de golpe cada vez que moría una holo.
+// Todas de nuevo, con las holo en (hx, hy).
+static void linesResetAt(const s16 *hx, const s16 *hy, u16 n)
+{
+    u16 i;
+
+    linesReset(n);
+    for (i = 0; i < n; i++) { lineSt[i].hx = hx[i]; lineSt[i].hy = hy[i]; }
+}
+
+static void linesRemap(const s16 *hx, const s16 *hy, u16 n)
+{
+    s16 j;
+    u16 i, k;
+    bool used[MAX_LINES], alive[MAX_LINES];
+
+    // Cada línea vieja se empareja con una holo nueva en su sitio que no
+    // tenga ya pareja: dos holo en el mismo píxel son dos líneas, y si muere
+    // una, sobra una (antes las dos encontraban la misma y quedaba una
+    // línea fantasma).
+    for (i = 0; i < n; i++) used[i] = FALSE;
+    for (j = 0; j < (s16)lineN; j++)
+    {
+        alive[j] = FALSE;
+        for (i = 0; i < n; i++)
+            if (!used[i] && (hx[i] == lineSt[j].hx) && (hy[i] == lineSt[j].hy))
+            { used[i] = TRUE; alive[j] = TRUE; break; }
+    }
+
+    for (j = (s16)lineN - 1; j >= 0; j--)
+    {
+        LineSt *l = &lineSt[j];
+
+        if (alive[j]) continue;
+
+        Beam_lineResize(l, 0);
+        for (k = (u16)j; k + 1 < lineN; k++) lineSt[k] = lineSt[k + 1];
+        lineN--;
+        if (lineDone > (u16)j) lineDone--;
+    }
+
+    // Tras quitar las que no están, quedan como mucho n: si no, algo no
+    // cuadra (no debería pasar, el orden del pool no cambia) y se rehacen
+    // todas antes de meter nada.
+    if (lineN > n)
+    {
+        linesResetAt(hx, hy, n);
+        return;
+    }
+    for (i = 0; i < n; i++)
+    {
+        LineSt *l = &lineSt[i];
+
+        if ((i < lineN) && (hx[i] == l->hx) && (hy[i] == l->hy)) continue;
+
+        for (k = lineN; k > i; k--) lineSt[k] = lineSt[k - 1];
+        lineN++;
+        l->slot = i ? (u8)(lineSt[i - 1].slot + lineSt[i - 1].cnt) : 0;
+        l->cnt = 0;
+        l->hx = hx[i];
+        l->hy = hy[i];
+        l->key = LS_KEY_NONE;
+        l->xlo = LS_XLO_NONE;
+        l->xw = 0;
+        l->ylo = LS_XLO_NONE;
+        l->yw = 0;
+        if (lineDone > i) lineDone = i;
+    }
+    // Las que siguen están en el mismo orden (el del pool), así que esto
+    // cuadra siempre; si algún día no, se rehacen todas.
+    if (lineN != n) { linesResetAt(hx, hy, n); return; }
+    lineForce = TRUE;
+}
+
 static void updateLines(fix16 px, fix16 py)
 {
-    fix16 tx[MAX_LINES], ty[MAX_LINES];
-    const u16 n = Proj_triPositions(tx, ty, MAX_LINES);
-    const s16 x0 = F2I(px), y0 = F2I(py);
-    u16 i, k, done = 0;
+    u16 i;
 
-    if ((n == 0) && (lineN == 0)) return;
+    lineX = F2I(px);
+    lineY = F2I(py);
 
-    if (n != lineN)
+    // Las posiciones de las holo, sólo si alguna ha nacido, se ha activado o
+    // ha muerto (no se mueven): recorrer el pool de proyectiles cada frame
+    // costaba lo suyo (medido: 4 vueltas de 600 con 10 holo).
+    if (!lineHolosOK || (Proj_holoStamp() != lineStamp))
     {
-        // Todo de nuevo, con bloques a partes iguales: se borra todo y las
-        // líneas salen por turnos, como cuando se mueve la nave (rehacer
-        // las 10 de golpe se comía el frame).
-        for (i = 0; i < BEAM_LINE_SPRITES; i++) sprHide(lineDot[i]);
-        memset(lineCnt, 0, sizeof(lineCnt));
-        memset(lineBand, 0, sizeof(lineBand));
-        memset(bandUse, 0, sizeof(bandUse));
-        for (i = 0; i < MAX_LINES; i++) { lineKey[i][0] = 0x7FFF; lineB0[i] = 0; lineB1[i] = 0; }
-        lineVis = 0;
-        lineN = n;
-        lineBlk = n ? (BEAM_LINE_SPRITES / n) : 0;
-        lineSX = g_shakeX;
-        lineSY = g_shakeY;
-        lineRR = 0;
-        lineDirty = TRUE;
-        lineHigh = 0;
-        tailRefresh();
-    }
+        fix16 tx[MAX_LINES], ty[MAX_LINES];
+        s16 hx[MAX_LINES], hy[MAX_LINES];
+        const u16 n = Proj_triPositions(tx, ty, MAX_LINES);
 
-    {
-        // La sacudida: mover lo que ya está puesto (lo aparcado no se toca).
-        if ((g_shakeX != lineSX) || (g_shakeY != lineSY))
+        for (i = 0; i < n; i++) { hx[i] = F2I(tx[i]); hy[i] = F2I(ty[i]); }
+        lineStamp = Proj_holoStamp();
+
+        if (lineHolosOK && lineN && n && (lineSegBlkOf[n] == lineSegBlkOf[lineN]))
         {
-            const s16 ddx = g_shakeX - lineSX;
-            const s16 ddy = g_shakeY - lineSY;
-            MDSpr **sp = lineDot;
-            u16 left = lineHigh;            // los copiados a la cola
-
-            while (left--)
-            {
-                MDSpr *q = *sp++;
-
-                q->x -= ddx;
-                q->y -= ddy;
-            }
-            lineSX = g_shakeX;
-            lineSY = g_shakeY;
+            linesRemap(hx, hy, n);
+            return;
         }
 
-        // Las que hayan cambiado, por turnos. Las holo activas no se mueven
-        // (sólo giran): con la nave quieta basta con mirarlas de vez en
-        // cuando, por si una muere y otra se activa en el mismo frame.
-        if ((x0 != lineLastX) || (y0 != lineLastY) || lineDirty || ((++lineTick & 15) == 0))
-        {
-            bool pending = FALSE;
-
-            for (k = 0; k < n; k++)
-            {
-                i = lineRR;
-                if (++lineRR >= n) lineRR = 0;
-
-                if ((lineKey[i][0] != x0) || (lineKey[i][1] != y0) ||
-                    (lineKey[i][2] != F2I(tx[i])) || (lineKey[i][3] != F2I(ty[i])))
-                {
-                    if (done < LINES_PER_FRAME) { buildLine(i, x0, y0, F2I(tx[i]), F2I(ty[i])); done++; }
-                    else { pending = TRUE; break; }
-                }
-            }
-            // Si queda alguna por rehacer, se vuelve a mirar el frame que viene.
-            lineDirty = pending;
-            lineLastX = x0;
-            lineLastY = y0;
-        }
-    }
-
-    if (done)
-    {
-        // Los que se ven, seguidos al principio de la cola, con la sacudida.
-        const u16 before = lineHigh;
-        u16 v = 0;
-
+        lineHolosOK = TRUE;
+        if (n != lineN) linesReset(n);
         for (i = 0; i < n; i++)
         {
-            const MDSpr *blk = &lineVirt[i * lineBlk];
+            LineSt *l = &lineSt[i];
 
-            for (k = 0; k < lineCnt[i]; k++, v++)
+            if ((hx[i] != l->hx) || (hy[i] != l->hy) || (l->key == LS_KEY_NONE))
             {
-                MDSpr *d = lineDot[v];
-
-                d->sizeLink = blk[k].sizeLink;
-                d->attr = blk[k].attr;
-                d->x = blk[k].x - g_shakeX;
-                d->y = blk[k].y - g_shakeY;
+                l->hx = hx[i];
+                l->hy = hy[i];
+                l->key = LS_KEY_NONE;
+                l->xlo = LS_XLO_NONE;
+                l->xw = 0;
+                l->ylo = LS_XLO_NONE;
+                l->yw = 0;
+                lineForce = TRUE;
             }
         }
-        for (k = v; k < before; k++) sprHide(lineDot[k]);
-        lineHigh = v;
-        tailRefresh();
     }
+}
+
+// Las líneas, con lo que el juego deja libre de la tabla del VDP: ha usado
+// las entradas 0 a nGame - 1, así que caben 80 - nGame ranuras (40 como
+// mucho). Devuelve cuántas van a la vista, que Spr_flush engancha detrás de
+// las suyas, y en *satLen cuántas entradas de vdpSpriteCache hay que subir.
+//
+// Lo que cuesta (ver docs/PORT_AUDIT_GML.md, quinta entrega):
+//   - nada se mira ni se rehace de lo que no cabe: el recorrido para en la
+//     primera línea que no quepa, y lo de detrás se mira cuando vuelva a
+//     caber;
+//   - con la nave quieta, sin sacudida nueva y sin holo nuevas, sólo esto;
+//   - con la nave en marcha, una resta y una comparación por línea y eje
+//     movido (src/beam_a.s) y rehacer las que cambian de celda: dos sumas de
+//     palabras largas por tramo;
+//   - con la sacudida, copiar las ranuras a la vista sumándosela (~55
+//     ciclos por ranura);
+//   - la subida va en el mismo DMA que la tabla del juego, y sólo llega
+//     hasta las ranuras que han cambiado.
+// (en src/beam_a.s, Beam_linesFlush: lo que hace, paso a paso, está allí)
+
+#ifndef PORT_NO_ASM
+#define PORT_NO_ASM 0
+#endif
+
+#if PORT_NO_ASM
+// ---------------------------------------------------------------------------
+// Las versiones en C de src/beam_a.s (PORT_NO_ASM=1): portables, más lentas,
+// la misma cuenta paso a paso. Si se toca el ensamblador, se toca esto.
+// ---------------------------------------------------------------------------
+void Beam_lineResize(LineSt *l, u16 cnt);
+
+static u16 lineCellRect(s16 d, s16 h, u16 qmax, s16 *lo, u16 *w, bool *m)
+{
+    u16 a, q, base;
+
+    *m = (d < 0);
+    a = (u16)(*m ? -d : d);
+    base = a & 0xFFF8;
+    q = a >> 3;
+    if (!*m)
+    {
+        *lo = h + (s16)base;
+        if (q < qmax) *w = 7;
+        else { *w = 0x3FFF - base; q = qmax; }
+    }
+    else if (q < qmax)
+    {
+        *lo = h - (s16)base - 7;
+        *w = q ? 7 : 6;
+    }
+    else
+    {
+        *lo = h - 0x3FFF;
+        *w = 0x3FFF - base;
+        q = qmax;
+    }
+    return q;
+}
+
+static void lineMiss(LineScan *c, LineSt *l)
+{
+    bool mx, my;
+    const u16 qx = lineCellRect(c->x0 - l->hx, l->hx, LINESEG_QX - 1, &l->xlo, &l->xw, &mx);
+    const u16 qy = lineCellRect(c->y0 - l->hy, l->hy, LINESEG_QY - 1, &l->ylo, &l->yw, &my);
+    const u16 flips = (mx ? TILE_ATTR_HFLIP_MASK : 0) | (my ? TILE_ATTR_VFLIP_MASK : 0);
+    const u16 cell = lineSegRow[qy] + qx;
+    const u16 key = cell | (flips << 3);
+    const u16 first = lineSegIdx[cell];
+    const u16 count = lineSegIdx[cell + 1] - first;
+    const u8 *rec = (const u8 *)&lineSegRec[(u32)first * (LINESEG_REC / 2)];
+    const u16 *pick = &lineSegPick[c->pickRow[count]];
+    const s16 *box = &lineSegBox[cell * 4];
+    const u16 oy = my ? 4 : 0, ox = mx ? 12 : 8;
+    u16 take = (count < c->blk) ? count : c->blk;
+    u16 j, used = 0;
+    u32 k1, k2;
+    u8 *dst;
+    s16 x0b, x1b, y0b, y1b;
+
+    if (key == l->key) return;
+    l->key = key;
+    if (take != l->cnt) Beam_lineResize(l, take);
+    if (l->slot < c->minSlot) c->minSlot = l->slot;
+
+    k1 = ((u32)(u16)(l->hy + c->by) << 16) | (u16)((SAT_MAX_SIZE - 2) - l->slot);
+    k2 = ((u32)(c->attr | flips) << 16) + (u32)(s32)(l->hx + c->bx);
+    dst = (u8 *)&lineSat[(BEAM_LINE_SPRITES - 1) - l->slot];
+
+    x0b = mx ? (l->hx - box[1]) : (l->hx + box[0]);
+    x1b = mx ? (l->hx - box[0]) : (l->hx + box[1]);
+    y0b = my ? (l->hy - box[3]) : (l->hy + box[2]);
+    y1b = my ? (l->hy - box[2]) : (l->hy + box[3]);
+    for (j = 0; j < take; j++)
+    {
+        const u8 *sg = rec + pick[j];
+        const u32 a = *(const u32 *)(sg + oy) + k1;
+        const u32 b = *(const u32 *)(sg + ox) + k2;
+
+        if ((x0b < 0) || (x1b > PLAYFIELD_W - 1) || (y0b < 0) || (y1b > PLAYFIELD_H - 1))
+        {
+            const u16 sz = (u16)(a >> 8) & 0xF;
+            if ((u16)((u16)b - c->bx) > lineClip[sz * 2]) continue;
+            if ((u16)((u16)(a >> 16) - c->by) > lineClip[sz * 2 + 1]) continue;
+        }
+        ((u32 *)dst)[0] = a;
+        ((u32 *)dst)[1] = b;
+        dst -= sizeof(VDPSprite);
+        k1--;
+        used++;
+    }
+    if (used != take) Beam_lineResize(l, used);
+}
+
+u16 Beam_linesScan(LineScan *c)
+{
+    LineSt *l = c->st;
+    u16 i;
+
+    for (i = 0; i < c->nScan; i++, l++)
+    {
+        bool miss = FALSE;
+
+        if (c->budget <= l->slot) break;
+        if ((c->mode & 1) && ((u16)(c->x0 - l->xlo) > l->xw)) miss = TRUE;
+        if ((c->mode & 2) && ((u16)(c->y0 - l->ylo) > l->yw)) miss = TRUE;
+        if (miss) lineMiss(c, l);
+    }
+    return i;
+}
+
+void Beam_linesCopy(const VDPSprite *src, VDPSprite *dst, u16 count, s32 dy16, s32 dx)
+{
+    const u32 *s = (const u32 *)src;
+    u32 *d = (u32 *)dst;
+
+    while (count--)
+    {
+        *d++ = *s++ + (u32)dy16;
+        *d++ = *s++ + (u32)dx;
+    }
+}
+
+u16 Beam_linesFlush(u16 nGame, u16 *satLen)
+{
+    u16 budget = SAT_MAX_SIZE - nGame, mode, k;
+    LineScan *c = &lineCtx;
+
+    *satLen = nGame;
+    if (budget > BEAM_LINE_SPRITES) budget = BEAM_LINE_SPRITES;
+    if (lineN == 0) { lineK = 0; return 0; }
+    if ((budget == lineG.budget) && (lineX == lineG.scx) && (lineY == lineG.scy) && !lineForce &&
+        (g_shakeX == lineG.gx) && (g_shakeY == lineG.gy) && (lineV >= lineK)) return lineK;
+    lineG.budget = budget;
+    if (lineD > budget) lineD = budget;
+
+    mode = ((lineX != lineG.scx) ? 1 : 0) | ((lineY != lineG.scy) ? 2 : 0);
+    if (lineForce) { lineForce = FALSE; lineDone = 0; }
+    lineG.scx = lineX;
+    lineG.scy = lineY;
+    c->x0 = lineX;
+    c->y0 = lineY;
+    c->budget = budget;
+    c->minSlot = 0xFFFF;
+    if (mode && lineDone)
+    {
+        u16 done;
+
+        c->st = lineSt;
+        c->nScan = lineDone;
+        c->mode = mode;
+        done = Beam_linesScan(c);
+        if (done < lineDone) lineDone = done;
+    }
+    if ((lineDone < lineN) && (lineSt[lineDone].slot < budget))
+    {
+        c->st = &lineSt[lineDone];
+        c->nScan = lineN - lineDone;
+        c->mode = 3;
+        lineDone += Beam_linesScan(c);
+    }
+    if (lineD > c->minSlot) lineD = c->minSlot;
+
+    k = (lineEnd < budget) ? lineEnd : budget;
+    if (k != lineK)
+    {
+        if (lineK)
+        {
+            lineLink(lineK - 1);
+            if (lineD > lineK - 1) lineD = lineK - 1;
+        }
+        lineK = k;
+        if (k && (lineD > k - 1)) lineD = k - 1;
+    }
+    if (k == 0)
+    {
+        if (lineV > budget) lineV = budget;
+        return 0;
+    }
+    lineSat[BEAM_LINE_SPRITES - k].link = 0;
+    if ((g_shakeX != lineG.gx) || (g_shakeY != lineG.gy))
+    {
+        lineG.gx = g_shakeX;
+        lineG.gy = g_shakeY;
+        lineD = 0;
+    }
+    if (lineD < k)
+    {
+        Beam_linesCopy(&lineSat[BEAM_LINE_SPRITES - k], &vdpSpriteCache[SAT_MAX_SIZE - k], k - lineD,
+                       -((s32)lineG.gy << 16), -(s32)lineG.gx);
+        if (lineV > lineD) lineV = lineD;
+        lineD = k;
+    }
+    if (lineV < k)
+    {
+        *satLen = SAT_MAX_SIZE - lineV;
+        lineV = k;
+    }
+    else if (lineV > budget) lineV = budget;
+    return k;
+}
+#endif
+
+// La cola de DMA estaba llena y la tabla no se ha subido: nada de las
+// líneas está en la VRAM con seguridad.
+void Beam_linesDmaLost(void)
+{
+    lineV = 0;
+}
+
+const VDPSprite *Beam_lineEntries(u16 *count)
+{
+    *count = lineK;
+    return &vdpSpriteCache[SAT_MAX_SIZE - lineK];
 }
 
 // RayoScr.Update de MonsterLite: la línea de la nave a cada objetivo, con

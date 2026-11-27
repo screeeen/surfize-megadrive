@@ -501,7 +501,8 @@ static void drawWeapons(s16 row)
                  row + WEAPON_TILES);
 }
 
-// El logo es el sprite de oMenu (sprite176, 256x256 con el origen en el
+// El logo (desde el 2026-11-27 el ARENA de MonsterLite, tools/ml_arena_logo.py,
+// en el hueco que tenía el sprite de oMenu: sprite176, 256x256 con el origen en el
 // centro) dibujado en la posición de la instancia, que en el room está en
 // (832, 608): el centro. Estaba pintado arriba del todo.
 #define LOGO_TILES   7
